@@ -1,0 +1,1858 @@
+{
+  "name": "AI-Powered Google Calendar Chatbot with Natural Language Intent Parsing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calendar-chatbot",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "379c73e9-16bc-4662-ad69-f458f8a6b074",
+      "name": "Chat Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        256,
+        1264
+      ],
+      "webhookId": "1e6c6c9f-406e-4851-9da0-196e32ec4e5e"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_message",
+              "value": "={{ $json.body.user_message || $json.query.user_message || $json.user_message }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || $json.query.user_id || $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || $json.query.session_id || $json.session_id || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "current_datetime",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ca176610-f18d-4595-b429-6481f248b108",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_message }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a calendar intent extraction assistant. Your ONLY job is to parse the user's natural language request and extract structured information into JSON format.\n\nRULES:\n1. Extract intent and parameters ONLY - never invent event details\n2. If the request is ambiguous or missing required information, set needs_clarification=true\n3. Prefer ask_clarification over making assumptions\n4. Output ONLY valid JSON matching the schema\n5. For dates: use ISO format (YYYY-MM-DD)\n6. For times: use HH:mm format (24-hour)\n7. If multiple interpretations exist, ask for clarification\n8. Never assume event titles, dates, or times that weren't mentioned\n9. Set calendar_id to 'primary' unless specified otherwise\n\nCurrent datetime for reference: {{ $('Normalize Input').item.json.current_datetime }}"
+        }
+      },
+      "id": "6c50aceb-1e8f-4df9-b67e-d5508e69a352",
+      "name": "Extract Intent and Parameters",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        704,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "ed775f09-c059-4fa8-ba64-3ae9a5e94e29",
+      "name": "OpenAI GPT-4",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        1488
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "4lCis3xbQnxPtn7C",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"intent\":{\"type\":\"string\",\"enum\":[\"create_event\",\"view_events\",\"move_event\",\"delete_event\",\"update_event\",\"ask_clarification\",\"unsupported\"]},\"event_title\":{\"type\":[\"string\",\"null\"]},\"source_date\":{\"type\":[\"string\",\"null\"]},\"target_date\":{\"type\":[\"string\",\"null\"]},\"source_time\":{\"type\":[\"string\",\"null\"]},\"target_time\":{\"type\":[\"string\",\"null\"]},\"date_range_start\":{\"type\":[\"string\",\"null\"]},\"date_range_end\":{\"type\":[\"string\",\"null\"]},\"participants\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"calendar_id\":{\"type\":\"string\",\"default\":\"primary\"},\"needs_clarification\":{\"type\":\"boolean\"},\"clarification_question\":{\"type\":[\"string\",\"null\"]},\"reason\":{\"type\":\"string\"}},\"required\":[\"intent\",\"needs_clarification\",\"reason\"]}"
+      },
+      "id": "38ed13be-7e81-424b-a2d9-c4dcf040bbf3",
+      "name": "JSON Schema Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.output.needs_clarification }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dabbd34d-0e4f-4405-80c6-161a591b2e6a",
+      "name": "Check If Clarification Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1056,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "view_events",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "create_event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "move_event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "update_event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.intent }}",
+                    "rightValue": "delete_event",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4fe152b7-f012-48a9-badd-eab730dd1379",
+      "name": "Route By Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1280,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "={{ $json.output.clarification_question || 'I need more information to complete this request. Could you please provide more details?' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "needs_clarification",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cdbf5c1a-bf69-4515-a48f-af76f5180590",
+      "name": "Build Clarification Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        1840
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.output.date_range_start || ($json.output.source_date ? $json.output.source_date + 'T00:00:00Z' : $now.minus({days: 1}).toISO()) }}",
+        "timeMax": "={{ $json.output.date_range_end || ($json.output.source_date ? $json.output.source_date + 'T23:59:59Z' : $now.plus({days: 30}).toISO()) }}",
+        "options": {
+          "query": "={{ $json.output.event_title || '' }}"
+        }
+      },
+      "id": "d41ad057-3513-4308-854b-33cd3a008d13",
+      "name": "Search Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1504,
+        1456
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "start": "={{ $json.output.target_date && $json.output.target_time ? $json.output.target_date + 'T' + $json.output.target_time + ':00' : $json.output.target_date ? $json.output.target_date + 'T09:00:00' : $now.plus({days: 1}).toISO() }}",
+        "end": "={{ $json.output.target_date && $json.output.target_time ? $json.output.target_date + 'T' + ($json.output.target_time.split(':')[0] + 1) + ':' + $json.output.target_time.split(':')[1] + ':00' : $json.output.target_date ? $json.output.target_date + 'T10:00:00' : $now.plus({days: 1, hours: 1}).toISO() }}",
+        "additionalFields": {
+          "attendees": "={{ $json.output.participants && $json.output.participants.length > 0 ? $json.output.participants.map(p => ({email: p})) : [] }}",
+          "summary": "={{ $json.output.event_title || 'New Event' }}"
+        }
+      },
+      "id": "b906aa1b-765c-4cdf-84fd-42945cacd834",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the extracted intent parameters from the previous node\nconst intentData = $input.first().json.output;\nconst searchResults = $input.all();\n\n// Filter out the first item which contains the intent data\nconst events = searchResults.slice(1).map(item => item.json);\n\n// Initialize match results\nlet matchedEvents = [];\nlet matchStatus = 'no_match';\n\n// If we have events to search through\nif (events.length > 0) {\n  // Filter by title if provided\n  if (intentData.event_title) {\n    const titleLower = intentData.event_title.toLowerCase();\n    matchedEvents = events.filter(event => {\n      const eventTitle = (event.summary || '').toLowerCase();\n      return eventTitle.includes(titleLower);\n    });\n  } else {\n    matchedEvents = events;\n  }\n\n  // Further filter by participants if provided\n  if (intentData.participants && intentData.participants.length > 0) {\n    matchedEvents = matchedEvents.filter(event => {\n      if (!event.attendees || event.attendees.length === 0) return false;\n      \n      const eventEmails = event.attendees.map(a => a.email.toLowerCase());\n      return intentData.participants.some(participant => \n        eventEmails.some(email => email.includes(participant.toLowerCase()))\n      );\n    });\n  }\n\n  // Determine match status\n  if (matchedEvents.length === 0) {\n    matchStatus = 'no_match';\n  } else if (matchedEvents.length === 1) {\n    matchStatus = 'single_match';\n  } else {\n    matchStatus = 'multiple_matches';\n  }\n}\n\n// Return the results\nreturn {\n  json: {\n    match_status: matchStatus,\n    match_count: matchedEvents.length,\n    matched_events: matchedEvents,\n    intent_data: intentData\n  }\n};"
+      },
+      "id": "72e1e9d8-bc81-44c5-b77a-cedc17477354",
+      "name": "Match Events Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        1264
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bc0acef0-defc-496b-b713-dacc21734a5b",
+      "name": "Merge Search Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1728,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.match_status }}",
+              "rightValue": "single_match",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c675337f-7a26-4a72-b2fb-feb22c0b7b97",
+      "name": "Check Match Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2176,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "eventId": "={{ $json.matched_events[0].id }}",
+        "updateFields": {
+          "end": "={{ $json.intent_data.target_date && $json.intent_data.target_time ? $json.intent_data.target_date + 'T' + ($json.intent_data.target_time.split(':')[0] * 1 + 1).toString().padStart(2, '0') + ':' + $json.intent_data.target_time.split(':')[1] + ':00' : $json.matched_events[0].end.dateTime }}",
+          "start": "={{ $json.intent_data.target_date && $json.intent_data.target_time ? $json.intent_data.target_date + 'T' + $json.intent_data.target_time + ':00' : $json.matched_events[0].start.dateTime }}"
+        }
+      },
+      "id": "ef938793-9d4c-444e-9d4b-831bf984a6c9",
+      "name": "Update Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "={{ $json.match_status === 'no_match' ? 'I could not find any events matching your request.' : 'I found ' + $json.match_count + ' events. Which one did you mean?\\n\\n' + $json.matched_events.map((e, i) => (i+1) + '. \"' + e.summary + '\" on ' + new Date(e.start.dateTime || e.start.date).toLocaleString()).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "={{ $json.match_status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa8831a1-0042-4b82-94fd-ba750f688304",
+      "name": "Build No Match Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        1264
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a7f7ad30-689d-442a-b62a-8574d9b41bd4",
+      "name": "Merge Update Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1728,
+        496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d6934f35-4c81-4dab-900c-2532fd67f911",
+      "name": "Merge Delete Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1728,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the extracted intent parameters from the previous node\nconst intentData = $input.first().json.output;\nconst searchResults = $input.all();\n\n// Filter out the first item which contains the intent data\nconst events = searchResults.slice(1).map(item => item.json);\n\n// Initialize match results\nlet matchedEvents = [];\nlet matchStatus = 'no_match';\n\n// If we have events to search through\nif (events.length > 0) {\n  // Filter by title if provided\n  if (intentData.event_title) {\n    const titleLower = intentData.event_title.toLowerCase();\n    matchedEvents = events.filter(event => {\n      const eventTitle = (event.summary || '').toLowerCase();\n      return eventTitle.includes(titleLower);\n    });\n  } else {\n    matchedEvents = events;\n  }\n\n  // Further filter by participants if provided\n  if (intentData.participants && intentData.participants.length > 0) {\n    matchedEvents = matchedEvents.filter(event => {\n      if (!event.attendees || event.attendees.length === 0) return false;\n      \n      const eventEmails = event.attendees.map(a => a.email.toLowerCase());\n      return intentData.participants.some(participant => \n        eventEmails.some(email => email.includes(participant.toLowerCase()))\n      );\n    });\n  }\n\n  // Determine match status\n  if (matchedEvents.length === 0) {\n    matchStatus = 'no_match';\n  } else if (matchedEvents.length === 1) {\n    matchStatus = 'single_match';\n  } else {\n    matchStatus = 'multiple_matches';\n  }\n}\n\n// Return the results\nreturn {\n  json: {\n    match_status: matchStatus,\n    match_count: matchedEvents.length,\n    matched_events: matchedEvents,\n    intent_data: intentData\n  }\n};"
+      },
+      "id": "2c968d4d-03f6-4333-835a-5b6ef8bc1bb9",
+      "name": "Match Events for Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the extracted intent parameters from the previous node\nconst intentData = $input.first().json.output;\nconst searchResults = $input.all();\n\n// Filter out the first item which contains the intent data\nconst events = searchResults.slice(1).map(item => item.json);\n\n// Initialize match results\nlet matchedEvents = [];\nlet matchStatus = 'no_match';\n\n// If we have events to search through\nif (events.length > 0) {\n  // Filter by title if provided\n  if (intentData.event_title) {\n    const titleLower = intentData.event_title.toLowerCase();\n    matchedEvents = events.filter(event => {\n      const eventTitle = (event.summary || '').toLowerCase();\n      return eventTitle.includes(titleLower);\n    });\n  } else {\n    matchedEvents = events;\n  }\n\n  // Further filter by participants if provided\n  if (intentData.participants && intentData.participants.length > 0) {\n    matchedEvents = matchedEvents.filter(event => {\n      if (!event.attendees || event.attendees.length === 0) return false;\n      \n      const eventEmails = event.attendees.map(a => a.email.toLowerCase());\n      return intentData.participants.some(participant => \n        eventEmails.some(email => email.includes(participant.toLowerCase()))\n      );\n    });\n  }\n\n  // Determine match status\n  if (matchedEvents.length === 0) {\n    matchStatus = 'no_match';\n  } else if (matchedEvents.length === 1) {\n    matchStatus = 'single_match';\n  } else {\n    matchStatus = 'multiple_matches';\n  }\n}\n\n// Return the results\nreturn {\n  json: {\n    match_status: matchStatus,\n    match_count: matchedEvents.length,\n    matched_events: matchedEvents,\n    intent_data: intentData\n  }\n};"
+      },
+      "id": "fd001c91-550c-4a3e-8ac7-35c096d1feea",
+      "name": "Match Events for Delete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.match_status }}",
+              "rightValue": "single_match",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f9417a07-220c-4307-845d-489a4b2acb15",
+      "name": "Check Update Match",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2176,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.match_status }}",
+              "rightValue": "single_match",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9dbfcde5-5864-4bd2-8fa6-55ea2c60c361",
+      "name": "Check Delete Match",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2176,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.output.date_range_start || ($json.output.source_date ? $json.output.source_date + 'T00:00:00Z' : $now.minus({days: 1}).toISO()) }}",
+        "timeMax": "={{ $json.output.date_range_end || ($json.output.source_date ? $json.output.source_date + 'T23:59:59Z' : $now.plus({days: 30}).toISO()) }}",
+        "options": {
+          "query": "={{ $json.output.event_title || '' }}"
+        }
+      },
+      "id": "638e9164-3dba-4ce0-8a0a-5f0dca0e2c42",
+      "name": "Search for Update",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1504,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $json.output.date_range_start || ($json.output.source_date ? $json.output.source_date + 'T00:00:00Z' : $now.minus({days: 1}).toISO()) }}",
+        "timeMax": "={{ $json.output.date_range_end || ($json.output.source_date ? $json.output.source_date + 'T23:59:59Z' : $now.plus({days: 30}).toISO()) }}",
+        "options": {
+          "query": "={{ $json.output.event_title || '' }}"
+        }
+      },
+      "id": "a91d84ab-fb31-43f6-9187-f0334914841c",
+      "name": "Search for Delete",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1504,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "eventId": "={{ $json.matched_events[0].id }}",
+        "updateFields": {
+          "end": "={{ $json.intent_data.target_date && $json.intent_data.target_time ? $json.intent_data.target_date + 'T' + ($json.intent_data.target_time.split(':')[0] * 1 + 1).toString().padStart(2, '0') + ':' + $json.intent_data.target_time.split(':')[1] + ':00' : $json.matched_events[0].end.dateTime }}",
+          "start": "={{ $json.intent_data.target_date && $json.intent_data.target_time ? $json.intent_data.target_date + 'T' + $json.intent_data.target_time + ':00' : $json.matched_events[0].start.dateTime }}"
+        }
+      },
+      "id": "8fbd792e-9abb-4be8-91a9-11e6f4a25e7e",
+      "name": "Execute Update",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "eventId": "={{ $json.matched_events[0].id }}",
+        "options": {}
+      },
+      "id": "78c718b2-8ed6-4113-ba22-b3cbc0f89dfb",
+      "name": "Execute Delete",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "={{ $json.match_status === 'no_match' ? 'I could not find any events matching your request to update.' : 'I found ' + $json.match_count + ' events. Which one did you want to update?\\n\\n' + $json.matched_events.map((e, i) => (i+1) + '. \"' + e.summary + '\" on ' + new Date(e.start.dateTime || e.start.date).toLocaleString()).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "={{ $json.match_status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2057cb75-2f25-4e1b-9751-fae957209f7d",
+      "name": "Build Update No Match Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "={{ $json.match_status === 'no_match' ? 'I could not find any events matching your request to delete.' : 'I found ' + $json.match_count + ' events. Which one did you want to delete?\\n\\n' + $json.matched_events.map((e, i) => (i+1) + '. \"' + e.summary + '\" on ' + new Date(e.start.dateTime || e.start.date).toLocaleString()).join('\\n') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "={{ $json.match_status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d18385ae-fbe4-43e4-a957-77aa5b8afc40",
+      "name": "Build Delete No Match Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=Here are your upcoming events:\n\n{{ $json.items && $json.items.length > 0 ? $json.items.map((e, i) => (i+1) + '. \"' + (e.summary || 'Untitled') + '\" on ' + new Date(e.start.dateTime || e.start.date).toLocaleString()).join('\\n') : 'No events found in the specified time range.' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_count",
+              "value": "={{ $json.items ? $json.items.length : 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ea01ba71-0530-4b15-a5bb-c7d23813c7bc",
+      "name": "Build View Events Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        1456
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=I created the event \"{{ $json.event_title }}\" on {{ new Date($json.event_start).toLocaleString() }}.",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.event_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f44bf697-8ba3-4227-bbe8-495903c6e381",
+      "name": "Build Create Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=I moved \"{{ $json.event_title }}\" to {{ new Date($json.new_start).toLocaleString() }}.",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.event_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0beca74e-3cf0-45a6-bb06-de113f0c646a",
+      "name": "Build Move Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=I updated \"{{ $json.event_title }}\" successfully.",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.event_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1290e284-5e0c-4008-8a1e-3f2792cae6f1",
+      "name": "Build Update Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=I deleted the event \"{{ $('Check Delete Match').item.json.matched_events[0].summary }}\" successfully.",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "success",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "00693f94-89c4-44b3-8111-0f235c2b4299",
+      "name": "Build Delete Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "response_message",
+              "value": "=I'm sorry, I don't support that type of request yet. I can help you view, create, move, update, or delete calendar events.",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "status",
+              "value": "unsupported",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7121b140-3383-48f5-a772-dbea1e0f98d1",
+      "name": "Build Unsupported Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3072,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { message: $json.response_message, status: $json.status } }}",
+        "options": {}
+      },
+      "id": "c64e80c8-9727-4594-9c50-63f649e0ffc1",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3296,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "user_requests",
+        "options": {}
+      },
+      "id": "74bfa336-5d4b-4aeb-ac87-ae4ce466a44c",
+      "name": "Log User Request",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $('Normalize Input').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "session_id",
+              "value": "={{ $('Normalize Input').item.json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "user_message",
+              "value": "={{ $('Normalize Input').item.json.user_message }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "intent",
+              "value": "={{ $json.output.intent }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "needs_clarification",
+              "value": "={{ $json.output.needs_clarification }}",
+              "type": "boolean"
+            },
+            {
+              "id": "id-7",
+              "name": "extracted_params",
+              "value": "={{ JSON.stringify($json.output) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1884e84-55cd-4bd7-9037-3f6df5ea1783",
+      "name": "Prepare Request Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $('Normalize Input').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "action_type",
+              "value": "create_event",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "event_title",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "event_start",
+              "value": "={{ $json.start.dateTime || $json.start.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "event_end",
+              "value": "={{ $json.end.dateTime || $json.end.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-8",
+              "name": "calendar_response",
+              "value": "={{ JSON.stringify($json) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa318fa5-1639-45d2-b80b-82ca5b20be2a",
+      "name": "Prepare Create Event Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "calendar_actions",
+        "options": {}
+      },
+      "id": "08b80306-be8a-435e-8c84-11868b649df3",
+      "name": "Log Create Event Action",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $('Normalize Input').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "action_type",
+              "value": "move_event",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "event_title",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "new_start",
+              "value": "={{ $json.start.dateTime || $json.start.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "new_end",
+              "value": "={{ $json.end.dateTime || $json.end.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-8",
+              "name": "calendar_response",
+              "value": "={{ JSON.stringify($json) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90836a36-acdf-439c-9e59-d1e40dbc1d93",
+      "name": "Prepare Move Event Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "calendar_actions",
+        "options": {}
+      },
+      "id": "9719bdcb-ee71-4031-a0ee-2083ffb83892",
+      "name": "Log Move Event Action",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $('Normalize Input').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "action_type",
+              "value": "update_event",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "event_title",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "updated_start",
+              "value": "={{ $json.start.dateTime || $json.start.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "updated_end",
+              "value": "={{ $json.end.dateTime || $json.end.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-8",
+              "name": "calendar_response",
+              "value": "={{ JSON.stringify($json) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "646cf12c-0782-44cf-a8c9-a462277218fe",
+      "name": "Prepare Update Event Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "calendar_actions",
+        "options": {}
+      },
+      "id": "ba8b4624-1b0d-45e2-8b9a-1b88fb9bf96d",
+      "name": "Log Update Event Action",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $('Normalize Input').item.json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "action_type",
+              "value": "delete_event",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "event_id",
+              "value": "={{ $('Check Delete Match').item.json.matched_events[0].id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "event_title",
+              "value": "={{ $('Check Delete Match').item.json.matched_events[0].summary }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "deleted_event_start",
+              "value": "={{ $('Check Delete Match').item.json.matched_events[0].start.dateTime || $('Check Delete Match').item.json.matched_events[0].start.date }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f97bd12a-fefa-4fa5-92ce-76ce84a6acfa",
+      "name": "Prepare Delete Event Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "calendar_actions",
+        "options": {}
+      },
+      "id": "c4665460-ab67-4d40-a5ad-d80970cd4651",
+      "name": "Log Delete Event Action",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1.1,
+      "position": [
+        2848,
+        688
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Extract Intent and Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Intent and Parameters",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Schema Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Extract Intent and Parameters",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Intent and Parameters": {
+      "main": [
+        [
+          {
+            "node": "Check If Clarification Needed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Request Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Clarification Needed": {
+      "main": [
+        [
+          {
+            "node": "Build Clarification Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route By Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route By Intent": {
+      "main": [
+        [
+          {
+            "node": "Search Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search for Update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Update Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search for Delete",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Delete Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Merge Search Results",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Build View Events Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Search Results": {
+      "main": [
+        [
+          {
+            "node": "Match Events Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Events Logic": {
+      "main": [
+        [
+          {
+            "node": "Check Match Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Match Status": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No Match Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search for Update": {
+      "main": [
+        [
+          {
+            "node": "Merge Update Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Search for Delete": {
+      "main": [
+        [
+          {
+            "node": "Merge Delete Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Update Results": {
+      "main": [
+        [
+          {
+            "node": "Match Events for Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Delete Results": {
+      "main": [
+        [
+          {
+            "node": "Match Events for Delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Events for Update": {
+      "main": [
+        [
+          {
+            "node": "Check Update Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Events for Delete": {
+      "main": [
+        [
+          {
+            "node": "Check Delete Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Update Match": {
+      "main": [
+        [
+          {
+            "node": "Execute Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Update No Match Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Delete Match": {
+      "main": [
+        [
+          {
+            "node": "Execute Delete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Delete No Match Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Prepare Create Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Prepare Move Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Update": {
+      "main": [
+        [
+          {
+            "node": "Prepare Update Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Delete": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delete Event Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Clarification Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build View Events Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Create Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Move Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Update Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Delete Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build No Match Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Update No Match Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Delete No Match Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Unsupported Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request Log": {
+      "main": [
+        [
+          {
+            "node": "Log User Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Create Event Log": {
+      "main": [
+        [
+          {
+            "node": "Log Create Event Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Move Event Log": {
+      "main": [
+        [
+          {
+            "node": "Log Move Event Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update Event Log": {
+      "main": [
+        [
+          {
+            "node": "Log Update Event Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delete Event Log": {
+      "main": [
+        [
+          {
+            "node": "Log Delete Event Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Create Event Action": {
+      "main": [
+        [
+          {
+            "node": "Build Create Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Move Event Action": {
+      "main": [
+        [
+          {
+            "node": "Build Move Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Update Event Action": {
+      "main": [
+        [
+          {
+            "node": "Build Update Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Delete Event Action": {
+      "main": [
+        [
+          {
+            "node": "Build Delete Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "14b73045-d135-4e5b-b94b-d7e25cda4572",
+  "meta": {
+    "instanceId": "8d43736631747d2de0a01552d6d8208ef17f42d98a6a4e5405128e3738322307"
+  },
+  "id": "2nPj9a3YQdsIUFrQ",
+  "tags": []
+}

@@ -1,0 +1,51 @@
+# Build artifacts
+dist/
+build/
+.bundle/
+
+# Dependency folders
+node_modules/
+client/node_modules/
+
+# Heavy media files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.psd
+*.ai
+*.sketch
+
+# Sensitive files
+.env
+.env.local
+.env.production
+.secrets
+*.key
+*.pem
+*.cert
+
+# Log files
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Package manager files
+package-lock.json
+yarn.lock

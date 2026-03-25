@@ -1,0 +1,792 @@
+{
+  "name": "Calendar Agent Backend Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "calendar-agent",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1bb0dd4-6e5a-4bfe-b48e-001-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        280
+      ],
+      "webhookId": "calendar-agent-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $json.body ?? $json;\nconst message = String(raw.message ?? raw.query ?? '').trim();\nconst userEmail = String(raw.userEmail ?? raw.email ?? '').trim().toLowerCase();\nif (!message) throw new Error('message is required');\nif (!userEmail) throw new Error('userEmail is required');\nreturn [{ json: { message, userEmail, receivedAt: new Date().toISOString() } }];"
+      },
+      "id": "9c6e0c39-3f8d-4824-9bca-002-normalize",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const message = $json.message;\nconst prompt = [\n  'You are an intent parser for a calendar agent.',\n  'Return strict JSON only. No markdown.',\n  'Never invent events. Prefer clarification over guessing.',\n  'Schema:',\n  '{',\n  '  \"intent\": \"create_event | view_events | move_event | delete_event | update_event | ask_clarification | unsupported\",',\n  '  \"event_title\": \"string or null\",',\n  '  \"new_title\": \"string or null\",',\n  '  \"new_description\": \"string or null\",',\n  '  \"new_location\": \"string or null\",',\n  '  \"source_date\": \"YYYY-MM-DD or null\",',\n  '  \"target_date\": \"YYYY-MM-DD or null\",',\n  '  \"source_time\": \"HH:mm or null\",',\n  '  \"target_time\": \"HH:mm or null\",',\n  '  \"date_range_start\": \"ISO datetime or null\",',\n  '  \"date_range_end\": \"ISO datetime or null\",',\n  '  \"participants\": [\"string\"],',\n  '  \"calendar_id\": \"primary\",',\n  '  \"needs_clarification\": true,',\n  '  \"clarification_question\": \"string or null\",',\n  '  \"reason\": \"short explanation\"',\n  '}',\n  '',\n  `User message: ${message}`\n].join('\\n');\nreturn [{ json: { ...$json, prompt } }];"
+      },
+      "id": "2d5d5408-07d8-456f-9365-003-prompt",
+      "name": "Build Intent Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'qwen2.5:3b-instruct', prompt: $json.prompt, stream: false, format: 'json' } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "16d64f3f-6e69-4cd1-b6d3-004-ollama",
+      "name": "Parse Intent With Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        940,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function extractJson(text) {\n  const raw = String(text || '').trim();\n  const start = raw.indexOf('{');\n  const end = raw.lastIndexOf('}');\n  if (start === -1 || end === -1 || end <= start) return null;\n  return raw.slice(start, end + 1);\n}\nconst source = $json.response ?? $json.data?.response ?? '';\nlet parsed;\ntry {\n  parsed = JSON.parse(source);\n} catch {\n  const candidate = extractJson(source);\n  parsed = candidate ? JSON.parse(candidate) : null;\n}\nif (!parsed || typeof parsed !== 'object') {\n  return [{ json: { ...$('Normalize Input').item.json, intent: 'ask_clarification', needs_clarification: true, clarification_question: 'I could not reliably understand that request. Can you restate it with the event name and date?', reason: 'Failed to parse model response.' } }];\n}\nconst result = {\n  ...$('Normalize Input').item.json,\n  intent: typeof parsed.intent === 'string' ? parsed.intent : 'ask_clarification',\n  event_title: parsed.event_title ?? null,\n  new_title: parsed.new_title ?? null,\n  new_description: parsed.new_description ?? null,\n  new_location: parsed.new_location ?? null,\n  source_date: parsed.source_date ?? null,\n  target_date: parsed.target_date ?? null,\n  source_time: parsed.source_time ?? null,\n  target_time: parsed.target_time ?? null,\n  date_range_start: parsed.date_range_start ?? null,\n  date_range_end: parsed.date_range_end ?? null,\n  participants: Array.isArray(parsed.participants) ? parsed.participants : [],\n  calendar_id: parsed.calendar_id || 'primary',\n  needs_clarification: Boolean(parsed.needs_clarification),\n  clarification_question: parsed.clarification_question ?? null,\n  reason: parsed.reason ?? ''\n};\nif (result.needs_clarification && result.intent !== 'ask_clarification') {\n  result.intent = 'ask_clarification';\n}\nreturn [{ json: result }];"
+      },
+      "id": "3798686b-e8d7-4618-9883-005-parse",
+      "name": "Parse Intent Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "view_events",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-view",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "view_events"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "create_event",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "create_event"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "move_event",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-move",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "move_event"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "delete_event",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-delete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "delete_event"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "update_event",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "update_event"
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "ask_clarification",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "cond-clarify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "ask_clarification"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unsupported"
+        }
+      },
+      "id": "4bbba8e8-7f34-4bb6-bb0e-006-switch",
+      "name": "Intent Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1420,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { body: { userEmail: $json.userEmail, query: [$json.event_title || '', $json.message].join(' ').trim(), summary: $json.event_title || '', date: $json.source_date || '', timeMin: $json.date_range_start || '', timeMax: $json.date_range_end || '', limit: $json.intent === 'view_events' ? 10 : 5 } } }];"
+      },
+      "id": "d7b6ef10-1b6a-4096-a92f-007-search-body",
+      "name": "Build Search Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/agent/events/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-agent-api-key",
+              "value": "={{ $env.AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "cc21ab18-6ffb-46f7-b59d-008-search-api",
+      "name": "Search Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1920,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const parsed = $('Parse Intent Result').item.json;\nconst events = Array.isArray($json.events) ? $json.events : [];\nfunction formatEvent(event) {\n  const when = event.start || event.startAt || 'unknown time';\n  return `${event.summary || '(No title)'} at ${when}`;\n}\nfunction buildTimedPatch(event, targetDate, targetTime) {\n  const originalStart = new Date(event.start || event.startAt);\n  const originalEnd = new Date(event.end || event.endAt || event.start || event.startAt);\n  const durationMs = Math.max(30 * 60 * 1000, originalEnd.getTime() - originalStart.getTime());\n  const datePart = targetDate || originalStart.toISOString().slice(0, 10);\n  const timePart = targetTime || `${String(originalStart.getHours()).padStart(2, '0')}:${String(originalStart.getMinutes()).padStart(2, '0')}`;\n  const nextStart = new Date(`${datePart}T${timePart}:00`);\n  const nextEnd = new Date(nextStart.getTime() + durationMs);\n  return {\n    start: { dateTime: nextStart.toISOString() },\n    end: { dateTime: nextEnd.toISOString() }\n  };\n}\nfunction buildAllDayPatch(event, targetDate) {\n  const startDate = event.start || event.startAt;\n  const endDate = event.end || event.endAt || startDate;\n  const start = new Date(`${startDate}T00:00:00Z`);\n  const end = new Date(`${endDate}T00:00:00Z`);\n  const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000));\n  const nextStart = new Date(`${targetDate}T00:00:00Z`);\n  const nextEnd = new Date(nextStart.getTime() + diffDays * 86400000);\n  return {\n    start: { date: nextStart.toISOString().slice(0, 10) },\n    end: { date: nextEnd.toISOString().slice(0, 10) }\n  };\n}\nif (parsed.intent === 'view_events') {\n  const reply = events.length ? `I found ${events.length} event(s):\\n${events.map((event, index) => `${index + 1}. ${formatEvent(event)}`).join('\\n')}` : 'I could not find any matching events.';\n  return [{ json: { readyForAction: false, response: { ok: true, reply, events } } }];\n}\nif (!events.length) {\n  return [{ json: { readyForAction: false, response: { ok: false, reply: 'I could not find any matching event to modify or delete.' } } }];\n}\nif (events.length > 1) {\n  return [{ json: { readyForAction: false, response: { ok: false, reply: `I found ${events.length} possible matches. Please be more specific:\\n${events.map((event, index) => `${index + 1}. ${formatEvent(event)}`).join('\\n')}` } } }];\n}\nconst event = events[0];\nif (parsed.intent === 'delete_event') {\n  return [{ json: { readyForAction: true, method: 'DELETE', url: `http://localhost:3000/api/agent/events/${event.eventId}`, body: { userEmail: parsed.userEmail, sendUpdates: 'all', sync: true }, eventSummary: event.summary || '(No title)' } }];\n}\nconst isAllDay = String(event.start || '').length === 10;\nconst patch = {};\nif (parsed.intent === 'move_event') {\n  if (!parsed.target_date && !parsed.target_time) {\n    return [{ json: { readyForAction: false, response: { ok: false, reply: 'I need the target date or time to move that event.' } } }];\n  }\n  Object.assign(patch, isAllDay ? buildAllDayPatch(event, parsed.target_date || parsed.source_date) : buildTimedPatch(event, parsed.target_date, parsed.target_time));\n}\nif (parsed.intent === 'update_event') {\n  if (parsed.new_title) patch.summary = parsed.new_title;\n  if (parsed.new_description) patch.description = parsed.new_description;\n  if (parsed.new_location) patch.location = parsed.new_location;\n  if (parsed.target_date || parsed.target_time) {\n    Object.assign(patch, isAllDay ? buildAllDayPatch(event, parsed.target_date || parsed.source_date) : buildTimedPatch(event, parsed.target_date, parsed.target_time));\n  }\n  if (!Object.keys(patch).length) {\n    return [{ json: { readyForAction: false, response: { ok: false, reply: 'I understood this as an update, but I do not have any fields to change yet.' } } }];\n  }\n}\nreturn [{ json: { readyForAction: true, method: 'PATCH', url: `http://localhost:3000/api/agent/events/${event.eventId}`, body: { userEmail: parsed.userEmail, sendUpdates: 'all', sync: true, ...patch }, eventSummary: event.summary || '(No title)', operation: parsed.intent } }];"
+      },
+      "id": "a6f8cf37-426b-42e6-8ac0-009-handle-search",
+      "name": "Handle Search Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "if-ready",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.readyForAction }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8b8f07d-ae48-42c7-915b-010-ready-if",
+      "name": "Ready For Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-agent-api-key",
+              "value": "={{ $env.AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b95a5441-fe5c-4c0d-a7d8-011-exec-mutation",
+      "name": "Execute Mutation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2640,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const parsed = $('Parse Intent Result').item.json;\nif (!parsed.event_title) {\n  return [{ json: { response: { ok: false, reply: 'I need the event title to create a new calendar event.' } } }];\n}\nif (parsed.date_range_start && parsed.date_range_end) {\n  return [{ json: { method: 'POST', url: 'http://localhost:3000/api/agent/events', body: { userEmail: parsed.userEmail, summary: parsed.event_title, description: parsed.new_description || '', location: parsed.new_location || '', attendees: parsed.participants || [], start: { dateTime: parsed.date_range_start }, end: { dateTime: parsed.date_range_end }, sendUpdates: 'all', sync: true } } }];\n}\nif (!parsed.target_date) {\n  return [{ json: { response: { ok: false, reply: 'I need a date to create the new event.' } } }];\n}\nif (!parsed.target_time) {\n  const nextDay = new Date(`${parsed.target_date}T00:00:00Z`);\n  nextDay.setUTCDate(nextDay.getUTCDate() + 1);\n  return [{ json: { method: 'POST', url: 'http://localhost:3000/api/agent/events', body: { userEmail: parsed.userEmail, summary: parsed.event_title, description: parsed.new_description || '', location: parsed.new_location || '', attendees: parsed.participants || [], start: { date: parsed.target_date }, end: { date: nextDay.toISOString().slice(0, 10) }, sendUpdates: 'all', sync: true } } }];\n}\nconst start = new Date(`${parsed.target_date}T${parsed.target_time}:00`);\nconst end = new Date(start.getTime() + 30 * 60 * 1000);\nreturn [{ json: { method: 'POST', url: 'http://localhost:3000/api/agent/events', body: { userEmail: parsed.userEmail, summary: parsed.event_title, description: parsed.new_description || '', location: parsed.new_location || '', attendees: parsed.participants || [], start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() }, sendUpdates: 'all', sync: true } } }];"
+      },
+      "id": "d271f27f-f1fb-4e39-a36d-012-create-body",
+      "name": "Build Create Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "if-create-ready",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "leftValue": "={{ $json.url }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4b64c2ff-e02c-4da2-a901-012b-create-ready",
+      "name": "Create Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-agent-api-key",
+              "value": "={{ $env.AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "eb6f5d0a-2f77-4731-a790-013-exec-create",
+      "name": "Execute Create",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2160,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const payload = $json.response ? $json.response : $json;\nconst response = payload.response || payload;\nreturn [{ json: response }];"
+      },
+      "id": "31a84bbb-42a3-46cd-915c-014-direct",
+      "name": "Format Direct Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const created = $json.event || {};\nconst title = created.summary || $('Parse Intent Result').item.json.event_title || '(No title)';\nconst when = created.start?.dateTime || created.start?.date || 'the requested time';\nreturn [{ json: { ok: true, reply: `Created '${title}' for ${when}.`, event: created } }];"
+      },
+      "id": "a651c022-d3ce-48fe-9b94-015-create-response",
+      "name": "Format Create Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const action = $('Handle Search Result').item.json;\nconst parsed = $('Parse Intent Result').item.json;\nconst label = action.eventSummary || 'the event';\nlet reply = `Updated '${label}'.`;\nif (parsed.intent === 'delete_event') reply = `Deleted '${label}'.`;\nif (parsed.intent === 'move_event') reply = `Moved '${label}' to the requested time.`;\nreturn [{ json: { ok: true, reply, event: $json.event || null } }];"
+      },
+      "id": "519d59ce-f3d5-4757-8936-016-mutation-response",
+      "name": "Format Mutation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const parsed = $('Parse Intent Result').item.json;\nconst reply = parsed.clarification_question || `I need a bit more detail before I can act on this request.`;\nreturn [{ json: { ok: false, reply, reason: parsed.reason || '' } }];"
+      },
+      "id": "3f5c7a0b-96dc-4daf-a7c7-017-clarify",
+      "name": "Format Clarification Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "4b1a220e-635b-4c06-bc72-018-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3140,
+        320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Build Intent Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Intent Prompt": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent With Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent With Ollama": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent Result": {
+      "main": [
+        [
+          {
+            "node": "Intent Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Switch": {
+      "main": [
+        [
+          {
+            "node": "Build Search Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Create Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Clarification Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Clarification Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Request": {
+      "main": [
+        [
+          {
+            "node": "Search Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Events": {
+      "main": [
+        [
+          {
+            "node": "Handle Search Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Search Result": {
+      "main": [
+        [
+          {
+            "node": "Ready For Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready For Action?": {
+      "main": [
+        [
+          {
+            "node": "Execute Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Direct Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Create Action": {
+      "main": [
+        [
+          {
+            "node": "Create Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Ready?": {
+      "main": [
+        [
+          {
+            "node": "Execute Create",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Direct Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Create": {
+      "main": [
+        [
+          {
+            "node": "Format Create Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Mutation": {
+      "main": [
+        [
+          {
+            "node": "Format Mutation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Clarification Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Direct Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Create Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Mutation Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c4b7d236-126b-4a57-9b34-calendar-agent-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "calendar-agent-workflow"
+}

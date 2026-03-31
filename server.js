@@ -995,6 +995,12 @@ const chatRouter = createChatRouter({
     timeoutMs: Number(N8N_CHAT_TIMEOUT_MS) || 60000,
     apiKey: N8N_CHAT_API_KEY,
   },
+  calendarOps: {
+    getGoogleCalendar: (req) => google.calendar({ version: 'v3', auth: getOAuthClientForRequest(req) }),
+    upsertFullEvents,
+    markEventDeleted,
+    refreshAndPersistLatest,
+  },
 });
 
 app.use('/api', chatRouter);

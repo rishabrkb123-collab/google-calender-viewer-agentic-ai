@@ -418,6 +418,221 @@ function detectIntent(message) {
   };
 }
 
+// ─── Mutation / Agentic helpers ───────────────────────────────────────────────
+
+function isConfirmation(message) {
+  const text = normalizeText(message).trim();
+  return /^(yes|yeah|yep|yup|sure|ok|okay|confirm|go ahead|do it|proceed|delete it|remove it|update it|move it|y|affirmative|correct|please do|sounds good|absolutely)$/.test(text);
+}
+
+function isRejection(message) {
+  const text = normalizeText(message).trim();
+  return /^(no|nope|nah|cancel|stop|nevermind|never mind|abort|dont|don'?t|n|negative|skip it|forget it|leave it)$/.test(text);
+}
+
+function detectMutationIntent(message) {
+  const text = normalizeText(message);
+
+  const hasDeleteWord = /\b(delete|remove|cancel(?! that)|drop|erase)\b/.test(text);
+  const hasCreateWord = /\b(create|add|schedule|set up|setup|book|make|new|plan|add a|add an)\b/.test(text);
+  const hasMoveWord = /\b(move|reschedule|shift|postpone|push back|bring forward|change|update|edit|modify|change the time|change the date)\b/.test(text);
+  const hasEventWord = /\b(event|meeting|appointment|call|session|reminder|standup|stand-?up|sync|lunch|dinner|interview|demo|review|check.?in|1:?1|one on one)\b/.test(text);
+  const hasToPhrase = /\b(to|at|on|for)\b/.test(text);
+
+  if (hasDeleteWord && !hasCreateWord) {
+    return { action: 'delete' };
+  }
+  if (hasCreateWord && (hasEventWord || hasToPhrase)) {
+    return { action: 'create' };
+  }
+  if (hasMoveWord && hasToPhrase && !hasCreateWord) {
+    return { action: 'update' };
+  }
+  return { action: null };
+}
+
+function extractEventRefFromMessage(message, action) {
+  let text = String(message || '').trim();
+
+  if (action === 'delete') {
+    text = text.replace(/^\s*(please\s+)?(delete|remove|cancel|drop|erase)\s+(the\s+|my\s+|that\s+|a\s+)?/i, '');
+    text = text.replace(/\s+(event|meeting|appointment|call|session|reminder)\s*[?.!]*\s*$/i, '');
+  } else if (action === 'update') {
+    text = text.replace(/^\s*(please\s+)?(move|reschedule|shift|change|update|edit|postpone|push back|bring forward|modify)\s+(the\s+|my\s+|that\s+|a\s+)?/i, '');
+    text = text.replace(/\s+(to|from)\s+.+$/i, '');
+    text = text.replace(/\s+(event|meeting|appointment|call|session|reminder)\s*[?.!]*\s*$/i, '');
+  }
+
+  return text.trim().replace(/[?.!]+$/, '').trim();
+}
+
+function parseTimeFromText(text) {
+  const s = String(text || '').toLowerCase();
+
+  // "at 3:30 pm", "3:30 pm", "at 3.30pm", "3.30PM" (colon or dot separator)
+  let m = s.match(/\bat\s+(\d{1,2})[.:](\d{2})\s*(am|pm)?\b/);
+  if (!m) m = s.match(/\b(\d{1,2})[.:](\d{2})\s*(am|pm)\b/);
+  if (!m) m = s.match(/\b(\d{1,2})[.:](\d{2})\b/); // bare "14:30" or "2.30" with no am/pm
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const ampm = m[3];
+    if (ampm === 'pm' && h < 12) h += 12;
+    else if (ampm === 'am' && h === 12) h = 0;
+    else if (!ampm && h < 12 && h >= 1) h += 12; // dot notation without am/pm → assume PM
+    if (h >= 0 && h < 24 && min >= 0 && min < 60) return { h, m: min };
+  }
+
+  // "at 3 pm" or "3pm" or "at 9" (whole hour)
+  m = s.match(/\bat\s+(\d{1,2})\s*(am|pm|o'?clock)?\b/);
+  if (!m) m = s.match(/\b(\d{1,2})\s*(am|pm)\b/);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const ampm = m[2];
+    if (ampm === 'pm' && h !== 12) h += 12;
+    else if (ampm === 'am' && h === 12) h = 0;
+    else if (!ampm && h >= 1 && h <= 7) h += 12; // assume PM for ambiguous 1-7
+    if (h >= 0 && h < 24) return { h, m: 0 };
+  }
+
+  return null;
+}
+
+function parseDurationFromText(text) {
+  const s = normalizeText(text);
+
+  let m = s.match(/\bfor\s+(\d+)\s*hours?\s*(?:and\s+)?(\d+)?\s*min/);
+  if (m) return parseInt(m[1], 10) * 60 + (m[2] ? parseInt(m[2], 10) : 0);
+
+  m = s.match(/\bfor\s+(\d+\.?\d*)\s*hours?\b/);
+  if (m) return Math.round(parseFloat(m[1]) * 60);
+
+  m = s.match(/\bfor\s+(\d+)\s*min/);
+  if (m) return parseInt(m[1], 10);
+
+  return 60; // default 1 hour
+}
+
+function parseCreateEventDetails(message, now) {
+  const text = String(message || '');
+
+  // Extract title using progressive patterns
+  let summary = null;
+  const titlePatterns = [
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?(?:event|meeting|appointment|call|session|reminder)?\s+(?:called|named|titled)\s+"([^"]+)"/i,
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?(?:event|meeting|appointment|call|session|reminder)?\s+(?:called|named|titled)\s+([^\n,]+?)(?:\s+(?:for|on|at|tomorrow|today)\b)/i,
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?"([^"]+)"/i,
+    /\b(?:schedule|book|add|create)\s+(?:a\s+)?([\w\s]{2,40}?)\s+(?:meeting|event|appointment|call|session|standup)\b/i,
+    /\b(?:schedule|book|add|create)\s+(?:a\s+)?(?:new\s+)?([\w\s]{2,40}?)\s+(?:for|on|at)\b/i,
+  ];
+
+  for (const pat of titlePatterns) {
+    const found = text.match(pat);
+    if (found) {
+      const candidate = (found[1] || '').trim().replace(/^(the|a|an)\s+/i, '');
+      if (candidate && candidate.length > 1 && !/^(for|on|at|tomorrow|today|next|this)\s/i.test(candidate)) {
+        summary = candidate;
+        break;
+      }
+    }
+  }
+
+  // Extract date — try specific date first (e.g. "Nov 29", "10/30/2026"),
+  // then fall back to relative heuristic (e.g. "tomorrow", "next week").
+  // Try both original case (for slash dates) and lowercased (for named months like "November").
+  const specificDate = parseDateString(text, now) || parseDateString(text.toLowerCase(), now);
+  const dateWindow = !specificDate ? parseDateWindowHeuristic(text, now) : null;
+  const date = specificDate || dateWindow?.start;
+
+  // Extract time
+  const timeObj = parseTimeFromText(text);
+
+  // Extract duration
+  const durationMinutes = parseDurationFromText(text);
+
+  let startDateTime = null;
+  let endDateTime = null;
+
+  if (date || timeObj) {
+    const baseDate = date || now;
+    const h = timeObj != null ? timeObj.h : 9; // default 9 AM if only date given
+    const min = timeObj != null ? timeObj.m : 0;
+    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), h, min, 0, 0);
+    startDateTime = startDate.toISOString();
+    endDateTime = new Date(startDate.getTime() + durationMinutes * 60000).toISOString();
+  }
+
+  // Extract location (e.g. "at the office" or "at Conference Room A")
+  let location = null;
+  const locMatch = text.match(/\bat\s+((?:[A-Z][a-zA-Z]+\s*){1,4})(?:\s+on|\s+for|\s+at\s+\d|\.|,|$)/);
+  if (locMatch && !/^\d/.test(locMatch[1])) location = locMatch[1].trim();
+
+  return { summary, startDateTime, endDateTime, location };
+}
+
+function parseUpdateEventDetails(message, now) {
+  const text = String(message || '');
+  const updates = {};
+
+  // Try specific date first (original for slash dates, lowercased for named months).
+  // Only fall back to heuristic for relative terms like "tomorrow", "next week".
+  const specificDate = parseDateString(text, now) || parseDateString(text.toLowerCase(), now);
+  const dateWindow = !specificDate ? parseDateWindowHeuristic(text, now) : null;
+  const date = specificDate || dateWindow?.start;
+  const timeObj = parseTimeFromText(text);
+
+  if (date || timeObj) {
+    const baseDate = date || now;
+    const h = timeObj != null ? timeObj.h : null;
+    const min = timeObj != null ? timeObj.m : 0;
+
+    if (h !== null) {
+      // We have a specific time
+      const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), h, min, 0, 0);
+      const durationMinutes = parseDurationFromText(text);
+      updates.start = { dateTime: startDate.toISOString() };
+      updates.end = { dateTime: new Date(startDate.getTime() + durationMinutes * 60000).toISOString() };
+    } else if (date) {
+      // Only a date change — time will be set by backend from existing event
+      updates._newDate = date;
+    }
+  }
+
+  // New title
+  const titleMatch = text.match(/\b(?:rename|change.*?title|change.*?name|call it|called)\s+(?:it\s+)?(?:to\s+)?"?([^"]+?)"?\s*$/i);
+  if (titleMatch) updates.summary = titleMatch[1].trim();
+
+  return updates;
+}
+
+function formatEventTimeForChat(event) {
+  const raw = event.startAt || event.start;
+  if (!raw) return 'unknown time';
+  // All-day events stored as YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) {
+    const d = new Date(`${raw}T12:00:00`);
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  }
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+}
+
+function formatDateTimeStringForChat(isoString) {
+  if (!isoString) return 'unknown time';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return String(isoString);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+// ─── End Mutation helpers ──────────────────────────────────────────────────────
+
 function eventOverlapsWindow(event, window) {
   if (!window?.start || !window?.end) return true;
   const start = toDateOrNull(event.start);
@@ -1093,6 +1308,7 @@ function createChatRouter({
   refreshEvents,
   maxResults = 50,
   n8n = {},
+  calendarOps = null,
 } = {}) {
   const router = express.Router();
 
@@ -1104,26 +1320,283 @@ function createChatRouter({
       const email = await getSessionEmail(req);
       if (!email) return res.status(400).json({ message: 'No user email available. Connect Google first.' });
 
-      if (n8n?.enabled === true) {
-        const sessionId = req.sessionID || req.session?.id || 'default';
-        const result = await callN8nChatWebhook({
-          webhookUrl: n8n.webhookUrl,
-          timeoutMs: n8n.timeoutMs,
-          apiKey: n8n.apiKey,
-          message,
-          userId: email,
-          sessionId,
-        });
-        req.session.lastChatContext = {
-          query: message,
-          eventIds: [],
-          window: null,
-          source: 'n8n',
-        };
-        return res.json({ reply: result.reply, source: 'n8n' });
+      // ─── Agentic mutation handling ─────────────────────────────────────────
+      const collection = getCollection();
+
+      // 1. Handle pending confirmation / rejection
+      const pendingAction = req.session?.pendingChatAction || null;
+      if (pendingAction) {
+        const confirmed = isConfirmation(message);
+        const rejected = isRejection(message);
+
+        if (confirmed || rejected) {
+          req.session.pendingChatAction = undefined;
+
+          if (rejected) {
+            return res.json({ reply: 'Action cancelled. Is there anything else I can help you with?' });
+          }
+
+          // Execute confirmed action
+          if (pendingAction.type === 'delete') {
+            try {
+              if (!calendarOps?.getGoogleCalendar) {
+                return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+              }
+              const gcal = calendarOps.getGoogleCalendar(req);
+              await gcal.events.delete({ calendarId: 'primary', eventId: pendingAction.eventId });
+              if (collection) await calendarOps.markEventDeleted(email, pendingAction.eventId);
+              await calendarOps.refreshAndPersistLatest(req);
+              return res.json({
+                reply: `Done! I've deleted "${pendingAction.eventSummary}" from your Google Calendar and updated your local data.`,
+                actionCompleted: { type: 'delete', eventId: pendingAction.eventId },
+              });
+            } catch (err) {
+              console.error('[chat] Delete failed:', err?.message || err);
+              const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+              return res.json({ reply: `Sorry, I couldn't delete the event: ${msg}` });
+            }
+          }
+
+          if (pendingAction.type === 'update') {
+            try {
+              if (!calendarOps?.getGoogleCalendar) {
+                return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+              }
+              const gcal = calendarOps.getGoogleCalendar(req);
+              const updates = { ...pendingAction.updates };
+              delete updates._newDate;
+
+              // If we only have a date change, fetch existing event to preserve time
+              if (pendingAction.updates._newDate && !pendingAction.updates.start) {
+                try {
+                  const existing = await gcal.events.get({ calendarId: 'primary', eventId: pendingAction.eventId });
+                  const existingStart = existing.data.start?.dateTime || existing.data.start?.date;
+                  const existingEnd = existing.data.end?.dateTime || existing.data.end?.date;
+                  if (existingStart && !existing.data.start?.date) {
+                    const oldStart = new Date(existingStart);
+                    const oldEnd = new Date(existingEnd || existingStart);
+                    const duration = oldEnd.getTime() - oldStart.getTime();
+                    const nd = pendingAction.updates._newDate;
+                    const newStart = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate(), oldStart.getHours(), oldStart.getMinutes(), 0, 0);
+                    updates.start = { dateTime: newStart.toISOString() };
+                    updates.end = { dateTime: new Date(newStart.getTime() + duration).toISOString() };
+                  }
+                } catch (_) { /* use what we have */ }
+              }
+
+              const resp = await gcal.events.patch({ calendarId: 'primary', eventId: pendingAction.eventId, requestBody: updates });
+              if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_update' });
+              await calendarOps.refreshAndPersistLatest(req);
+              return res.json({
+                reply: `Done! I've updated "${pendingAction.eventSummary}" — the changes are saved in Google Calendar and synced locally.`,
+                actionCompleted: { type: 'update', eventId: pendingAction.eventId },
+              });
+            } catch (err) {
+              console.error('[chat] Update failed:', err?.message || err);
+              const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+              return res.json({ reply: `Sorry, I couldn't update the event: ${msg}` });
+            }
+          }
+        }
       }
 
-      const collection = getCollection();
+      // 2. Check for new mutation intents (create / delete / update)
+      if (collection) {
+        const mutationIntent = detectMutationIntent(message);
+
+        if (mutationIntent.action === 'delete') {
+          const eventRef = extractEventRefFromMessage(message, 'delete');
+          const refTokens = tokenizeQuery(eventRef || message);
+
+          if (!refTokens.length) {
+            return res.json({ reply: 'Which event would you like to delete? Please tell me its name or describe it.' });
+          }
+
+          const searchFilter = {
+            email,
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+            status: { $ne: 'cancelled' },
+            searchTokens: { $in: refTokens },
+          };
+
+          const candidates = await collection
+            .find(searchFilter, { projection: { _id: 0, eventId: 1, summary: 1, startAt: 1, start: 1, end: 1, location: 1 } })
+            .sort({ startAt: 1 })
+            .limit(10)
+            .toArray();
+
+          const ranked = preferExactSummaryMatches(rankEventsByText(candidates, refTokens), refTokens);
+
+          if (!ranked.length) {
+            return res.json({ reply: `I couldn't find any event matching "${eventRef}". Could you be more specific or check the event name?` });
+          }
+
+          const ev = ranked[0];
+          const when = formatEventTimeForChat(ev);
+
+          if (ranked.length === 1) {
+            req.session.pendingChatAction = {
+              type: 'delete',
+              eventId: ev.eventId,
+              eventSummary: ev.summary || '(No title)',
+            };
+            return res.json({
+              reply: `I found **"${ev.summary || '(No title)'}"** scheduled for ${when}.\n\nAre you sure you want to permanently delete this event from your Google Calendar?\n\nReply **"yes"** to confirm or **"no"** to cancel.`,
+              requiresConfirmation: true,
+              pendingAction: { type: 'delete', eventSummary: ev.summary || '(No title)', when },
+            });
+          }
+
+          // Multiple matches — list them
+          const list = ranked.slice(0, 5).map((e, i) => `${i + 1}. "${e.summary || '(No title)'}" — ${formatEventTimeForChat(e)}`).join('\n');
+          return res.json({ reply: `I found multiple events matching "${eventRef}":\n\n${list}\n\nPlease be more specific — which one do you want to delete?` });
+        }
+
+        if (mutationIntent.action === 'create') {
+          const now = new Date();
+          const eventDetails = parseCreateEventDetails(message, now);
+
+          if (!eventDetails.summary) {
+            return res.json({ reply: 'I\'d be happy to create an event! Please include:\n• A name/title\n• Date (e.g. "tomorrow", "April 5")\n• Time (e.g. "at 3 PM")\n\nExample: "Create a team meeting on April 5 at 2 PM"' });
+          }
+
+          if (!eventDetails.startDateTime) {
+            return res.json({ reply: `I'll create "${eventDetails.summary}". What date and time should it be scheduled? (e.g. "tomorrow at 3 PM" or "April 5 at 2:30 PM")` });
+          }
+
+          try {
+            if (!calendarOps?.getGoogleCalendar) {
+              return res.json({ reply: 'Google Calendar is not connected. Please connect it via the dashboard first.' });
+            }
+            const gcal = calendarOps.getGoogleCalendar(req);
+            const requestBody = {
+              summary: eventDetails.summary,
+              start: { dateTime: eventDetails.startDateTime },
+              end: { dateTime: eventDetails.endDateTime },
+            };
+            if (eventDetails.location) requestBody.location = eventDetails.location;
+
+            const resp = await gcal.events.insert({ calendarId: 'primary', requestBody });
+            if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_create' });
+            await calendarOps.refreshAndPersistLatest(req);
+
+            const startStr = formatDateTimeStringForChat(eventDetails.startDateTime);
+            const endStr = formatDateTimeStringForChat(eventDetails.endDateTime);
+            return res.json({
+              reply: `Done! I've created **"${eventDetails.summary}"**\n📅 Starts: ${startStr}\n⏰ Ends: ${endStr}${eventDetails.location ? `\n📍 Location: ${eventDetails.location}` : ''}\n\nThe event is now in your Google Calendar and synced locally.`,
+              actionCompleted: { type: 'create', eventId: resp.data.id },
+            });
+          } catch (err) {
+            console.error('[chat] Create failed:', err?.message || err);
+            const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+            return res.json({ reply: `Sorry, I couldn't create the event: ${msg}` });
+          }
+        }
+
+        if (mutationIntent.action === 'update') {
+          const now = new Date();
+          const eventRef = extractEventRefFromMessage(message, 'update');
+          const refTokens = tokenizeQuery(eventRef || message);
+          const updates = parseUpdateEventDetails(message, now);
+
+          if (!refTokens.length) {
+            return res.json({ reply: 'Which event would you like to update? Please include the event name.' });
+          }
+
+          const searchFilter = {
+            email,
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+            status: { $ne: 'cancelled' },
+            searchTokens: { $in: refTokens },
+          };
+
+          const candidates = await collection
+            .find(searchFilter, { projection: { _id: 0, eventId: 1, summary: 1, startAt: 1, start: 1, end: 1, location: 1 } })
+            .sort({ startAt: 1 })
+            .limit(10)
+            .toArray();
+
+          const ranked = preferExactSummaryMatches(rankEventsByText(candidates, refTokens), refTokens);
+
+          if (!ranked.length) {
+            return res.json({ reply: `I couldn't find any event matching "${eventRef}". Could you be more specific?` });
+          }
+
+          if (!updates.start && !updates._newDate && !updates.summary) {
+            const ev = ranked[0];
+            return res.json({ reply: `I found **"${ev.summary || '(No title)'}"** on ${formatEventTimeForChat(ev)}.\n\nWhat would you like to change? For example:\n• "move it to April 5 at 3 PM"\n• "reschedule to tomorrow at 2 PM"\n• "rename it to New Meeting Name"` });
+          }
+
+          const ev = ranked[0];
+          const summaryLabel = ev.summary || '(No title)';
+
+          // For time/date changes, ask for confirmation
+          if (updates.start || updates._newDate) {
+            let newTimeStr;
+            if (updates.start) {
+              newTimeStr = formatDateTimeStringForChat(updates.start.dateTime);
+            } else {
+              newTimeStr = updates._newDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            }
+            req.session.pendingChatAction = {
+              type: 'update',
+              eventId: ev.eventId,
+              eventSummary: summaryLabel,
+              updates,
+            };
+            return res.json({
+              reply: `I'll move **"${summaryLabel}"** to ${newTimeStr}.\n\nShall I proceed? Reply **"yes"** to confirm or **"no"** to cancel.`,
+              requiresConfirmation: true,
+              pendingAction: { type: 'update', eventSummary: summaryLabel, newTime: newTimeStr },
+            });
+          }
+
+          // Title-only change — do immediately
+          try {
+            if (!calendarOps?.getGoogleCalendar) {
+              return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+            }
+            const gcal = calendarOps.getGoogleCalendar(req);
+            const patchBody = {};
+            if (updates.summary) patchBody.summary = updates.summary;
+            const resp = await gcal.events.patch({ calendarId: 'primary', eventId: ev.eventId, requestBody: patchBody });
+            if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_update' });
+            await calendarOps.refreshAndPersistLatest(req);
+            return res.json({
+              reply: `Done! I've updated "${summaryLabel}" → "${updates.summary}". The change is saved in Google Calendar and synced locally.`,
+              actionCompleted: { type: 'update', eventId: ev.eventId },
+            });
+          } catch (err) {
+            console.error('[chat] Title update failed:', err?.message || err);
+            return res.json({ reply: `Sorry, I couldn't update the event: ${err?.message || 'Please try again.'}` });
+          }
+        }
+      }
+      // ─── End agentic mutation handling ────────────────────────────────────────
+
+      if (n8n?.enabled === true) {
+        const sessionId = req.sessionID || req.session?.id || 'default';
+        try {
+          const result = await callN8nChatWebhook({
+            webhookUrl: n8n.webhookUrl,
+            timeoutMs: n8n.timeoutMs,
+            apiKey: n8n.apiKey,
+            message,
+            userId: email,
+            sessionId,
+          });
+          req.session.lastChatContext = {
+            query: message,
+            eventIds: [],
+            window: null,
+            source: 'n8n',
+          };
+          return res.json({ reply: result.reply, source: 'n8n' });
+        } catch (n8nError) {
+          console.warn('n8n chat failed, falling back to local chat:', n8nError?.message || n8nError);
+        }
+      }
+
       if (!collection) return res.status(503).json({ message: 'Database not ready yet.' });
 
       const intent = detectIntent(message);

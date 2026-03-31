@@ -1,134 +1,135 @@
 @echo off
-REM Updated 2026-03-10 (deterministic chatbot by default + optional Ollama)
+REM ============================================================
+REM  run-project.bat  —  Check dependencies, start server, open browser
+REM  Run install-dependencies.bat first if this is a fresh setup.
+REM ============================================================
 setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "BACKEND_PORT=3000"
-set "FRONTEND_URL=http://localhost:%BACKEND_PORT%"
-set "BACKEND_URL=http://localhost:%BACKEND_PORT%"
-set "CHAT_MODEL=gpt-oss:120b-cloud"
-set "CHAT_USE_LLM_INTENT=false"
-set "CHAT_USE_LLM_REPLY=false"
-set "CHAT_USE_LLM_SEMANTIC_FALLBACK=true"
-set "USE_OLLAMA=true"
 
-if not exist ".env" (
-  copy ".env.example" ".env" >nul
+REM ── Read PORT from .env if present ──────────────────────────
+if exist ".env" (
+  for /f "usebackq tokens=1,* delims==" %%A in (`findstr /R /B /C:"PORT=" ".env" 2^>nul`) do (
+    if /I "%%A"=="PORT" if not "%%B"=="" set "BACKEND_PORT=%%B"
+  )
+) else (
+  if exist ".env.example" copy ".env.example" ".env" >nul
+  echo NOTE: .env was missing — copied from .env.example. Fill in your credentials.
 )
 
+set "APP_URL=http://localhost:%BACKEND_PORT%"
+
+echo ============================================================
+echo  Google Calendar Agent — Startup Check
+echo ============================================================
+echo.
+
+REM ── 1. Node.js ───────────────────────────────────────────────
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js is not installed or not in PATH.
-  pause
-  exit /b 1
+  echo [FAIL] Node.js not found. Run install-dependencies.bat first.
+  pause & exit /b 1
 )
+for /f "tokens=*" %%V in ('node -v 2^>nul') do set "NODE_VER=%%V"
+echo [OK]   Node.js %NODE_VER%
 
+REM ── 2. npm ───────────────────────────────────────────────────
 where npm >nul 2>nul
 if errorlevel 1 (
-  echo npm is not installed or not in PATH.
-  pause
-  exit /b 1
+  echo [FAIL] npm not found. Run install-dependencies.bat first.
+  pause & exit /b 1
 )
+echo [OK]   npm found
 
-set "missing="
-findstr /B /C:"GOOGLE_CLIENT_ID=" ".env" >nul || set "missing=1"
-findstr /B /C:"GOOGLE_CLIENT_SECRET=" ".env" >nul || set "missing=1"
-findstr /B /C:"SESSION_SECRET=" ".env" >nul || set "missing=1"
-findstr /B /C:"MONGODB_URI=" ".env" >nul || set "missing=1"
-
-if defined missing (
-  echo.
-  echo Missing required values in .env. Please open .env and fill in:
-  echo   GOOGLE_CLIENT_ID
-  echo   GOOGLE_CLIENT_SECRET
-  echo   SESSION_SECRET
-  echo   MONGODB_URI
-  echo.
-  pause
-  exit /b 1
+REM ── 3. Backend node_modules ──────────────────────────────────
+if not exist "node_modules" (
+  echo [FAIL] Backend dependencies missing. Run install-dependencies.bat first.
+  pause & exit /b 1
 )
+echo [OK]   Backend dependencies present
 
-echo Installing backend dependencies...
-call npm.cmd install --no-audit --no-fund
-if errorlevel 1 (
-  echo Backend dependency installation failed.
-  pause
-  exit /b 1
-)
-
+REM ── 4. Frontend node_modules ─────────────────────────────────
 if exist "client\package.json" (
-  echo Installing frontend dependencies...
-  call npm.cmd --prefix client install --no-audit --no-fund
-  if errorlevel 1 (
-    echo Frontend dependency installation failed.
-    pause
-    exit /b 1
+  if not exist "client\node_modules" (
+    echo [FAIL] Frontend dependencies missing. Run install-dependencies.bat first.
+    pause & exit /b 1
   )
-  echo Building frontend...
-  call npm.cmd run client:build
+  echo [OK]   Frontend dependencies present
+)
+
+REM ── 5. Built frontend ────────────────────────────────────────
+if not exist "public\index.html" (
+  echo [FAIL] Frontend not built. Run install-dependencies.bat first.
+  pause & exit /b 1
+)
+echo [OK]   Frontend build present
+
+REM ── 6. .env credentials ──────────────────────────────────────
+set "missing_creds="
+findstr /B /C:"GOOGLE_CLIENT_ID=" ".env" >nul 2>nul || set "missing_creds=1"
+findstr /B /C:"GOOGLE_CLIENT_SECRET=" ".env" >nul 2>nul || set "missing_creds=1"
+findstr /B /C:"SESSION_SECRET=" ".env" >nul 2>nul || set "missing_creds=1"
+findstr /B /C:"MONGODB_URI=" ".env" >nul 2>nul || set "missing_creds=1"
+
+if defined missing_creds (
+  echo.
+  echo [WARN] .env is missing required values. Open .env and fill in:
+  echo   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET, MONGODB_URI
+  echo.
+  echo The server may fail to start without these. Press any key to continue anyway...
+  pause >nul
+)
+
+REM ── 7. Optional: start Ollama if available ────────────────────
+where ollama >nul 2>nul
+if not errorlevel 1 (
+  powershell -NoProfile -Command "try { Invoke-RestMethod -TimeoutSec 2 http://localhost:11434/api/tags > $null; exit 0 } catch { exit 1 }" >nul 2>nul
   if errorlevel 1 (
-    echo Frontend build failed.
-    pause
-    exit /b 1
+    echo Starting Ollama in background...
+    start "" /B cmd /c "ollama serve" >nul 2>nul
+    timeout /t 2 >nul
   )
+  echo [OK]   Ollama running
+) else (
+  echo [INFO] Ollama not installed — chatbot will use deterministic replies.
+)
+
+REM ── Kill any existing server on this port ────────────────────
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr ":%BACKEND_PORT% " ^| findstr "LISTENING"') do (
+  taskkill /PID %%P /F >nul 2>nul
 )
 
 echo.
-echo Chatbot startup mode:
-echo   CHAT_USE_LLM_INTENT=%CHAT_USE_LLM_INTENT%
-echo   CHAT_USE_LLM_REPLY=%CHAT_USE_LLM_REPLY%
-echo   CHAT_USE_LLM_SEMANTIC_FALLBACK=%CHAT_USE_LLM_SEMANTIC_FALLBACK%
-echo   USE_OLLAMA=%USE_OLLAMA%
+echo ============================================================
+echo  Starting server on port %BACKEND_PORT% ...
+echo ============================================================
 echo.
 
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%BACKEND_PORT% .*LISTENING"') do (
-  taskkill /PID %%p /F >nul 2>nul
-)
-REM Kill anything on backend port
+start "Google Calendar Agent" cmd /k "node server.js 2>&1"
 
-if /I "%USE_OLLAMA%"=="true" (
-  where ollama >nul 2>nul
-  if not errorlevel 1 (
-    powershell -NoProfile -Command "try { Invoke-RestMethod -TimeoutSec 2 http://localhost:11434/api/tags > $null } catch { exit 1 }"
-    if errorlevel 1 (
-      start "Ollama" cmd /c "ollama serve"
-      timeout /t 2 >nul
-    )
-    echo Ensuring Ollama model is available: %CHAT_MODEL%
-    call ollama pull %CHAT_MODEL%
-  ) else (
-    echo Ollama was requested but is not installed. Continuing without it.
-  )
-)
-
-start "Backend" cmd /c "set OLLAMA_MODEL=%CHAT_MODEL%&& set CHAT_USE_LLM_INTENT=%CHAT_USE_LLM_INTENT%&& set CHAT_USE_LLM_REPLY=%CHAT_USE_LLM_REPLY%&& set CHAT_USE_LLM_SEMANTIC_FALLBACK=%CHAT_USE_LLM_SEMANTIC_FALLBACK%&& npm.cmd start 1>server-run.out.log 2>server-run.err.log"
-
+REM ── Wait for server to be ready (up to 30 s) ─────────────────
 set "BACKEND_READY="
 for /L %%i in (1,1,30) do (
-  powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 '%BACKEND_URL%/api/local/me' > $null; exit 0 } catch { exit 1 }"
-  if not errorlevel 1 (
-    set "BACKEND_READY=1"
-    goto :wait_for_open
+  if not defined BACKEND_READY (
+    powershell -NoProfile -Command "if (Test-NetConnection -ComputerName localhost -Port %BACKEND_PORT% -InformationLevel Quiet -WarningAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+    if not errorlevel 1 set "BACKEND_READY=1"
+    if not defined BACKEND_READY timeout /t 1 >nul
   )
-  timeout /t 1 >nul
 )
 
-:wait_for_open
-set "OPENED="
-for /L %%i in (1,1,30) do (
-  powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 '%FRONTEND_URL%' > $null; exit 0 } catch { exit 1 }"
-  if not errorlevel 1 (
-    set "OPENED=1"
-    goto :open_browser
-  )
-  timeout /t 1 >nul
-)
-
-:open_browser
-if defined OPENED (
-  echo Opening application in browser...
-  echo Note: each user must log in locally and then connect Google Calendar before chat can answer from their events.
-  start "" "%FRONTEND_URL%"
+if defined BACKEND_READY (
+  echo Server is up! Opening %APP_URL% ...
+  start "" "%APP_URL%"
+  echo.
+  echo NOTE: Log in as admin / admin, then click "Connect Google Calendar".
 ) else (
-  start "" "%BACKEND_URL%"
+  echo Server did not respond within 30 seconds.
+  echo Check the server window for errors, or view server-run.err.log.
+  start "" "%APP_URL%"
 )
+
+echo.
+echo The server is running in a separate window.
+echo Close that window to stop the server.
+echo.

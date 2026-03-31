@@ -580,6 +580,87 @@ html[data-theme='dark'] .input {
 .chat-input textarea {
   resize: none;
 }
+
+/* Confirmation buttons */
+.confirm-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-left: 0.2rem;
+}
+
+.confirm-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.confirm-btn:active {
+  transform: scale(0.97);
+}
+
+.confirm-yes {
+  background: #16a34a;
+  color: #fff;
+  border-color: #15803d;
+}
+
+.confirm-yes:hover {
+  background: #15803d;
+}
+
+.confirm-no {
+  background: #dc2626;
+  color: #fff;
+  border-color: #b91c1c;
+}
+
+.confirm-no:hover {
+  background: #b91c1c;
+}
+
+/* Success / action completed bubble */
+.chat-bubble.action-success {
+  border-left: 3px solid #16a34a;
+}
+
+/* Confirmation needed bubble */
+.chat-bubble.needs-confirm {
+  border-left: 3px solid #f59e0b;
+}
+
+.action-icon {
+  margin-right: 0.2rem;
+}
+
+/* Typing indicator */
+.chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.6rem 0.8rem;
+}
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted, #888);
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
 .events {
   display: grid;
   gap: 1rem;

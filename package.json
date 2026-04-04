@@ -5,6 +5,7 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
+        "build": "npm --prefix client install && npm --prefix client run build",
         "dev": "node --watch server.js",
         "n8n": "n8n",
         "n8n:start": "n8n start",

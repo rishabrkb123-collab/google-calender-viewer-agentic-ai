@@ -83,9 +83,20 @@ function extractPatientAndTreatment(event) {
 
 function formatDate(value) {
   if (!value) return 'N/A';
-  if (isAllDay(value)) return value;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  if (isAllDay(value)) {
+    // Parse as local midnight (not UTC) to avoid off-by-one day errors
+    const d = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  });
 }
 
 function getStatus(event) {

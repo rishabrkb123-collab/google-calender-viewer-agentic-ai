@@ -63,7 +63,7 @@ function cleanTextToken(term) {
       if (part.endsWith('s') && part.length > 3) return part.slice(0, -1);
       return part;
     })
-    .filter((part) => part && part.length > 1 && !/^\d+$/.test(part) && !BASE_STOP_WORDS.has(part));
+    .filter((part) => part && part.length >= 1 && !BASE_STOP_WORDS.has(part));
 }
 
 function tokenizeWords(text) {
@@ -574,12 +574,20 @@ function parseUpdateEventDetails(message, now) {
   const text = String(message || '');
   const updates = {};
 
+  // Extract the destination portion of the message (text after the last " to ").
+  // This fixes "move my 3pm standup to 5pm" picking up 3pm instead of 5pm.
+  // e.g. "move my 3pm standup to 5pm"      → parseText = "5pm"
+  // e.g. "reschedule meeting to next Monday" → parseText = "next Monday"
+  // e.g. "change time of doctor appt to 2pm" → parseText = "2pm"
+  const lastToIdx = text.toLowerCase().lastIndexOf(' to ');
+  const parseText = lastToIdx !== -1 ? text.slice(lastToIdx + 4) : text;
+
   // Try specific date first (original for slash dates, lowercased for named months).
   // Only fall back to heuristic for relative terms like "tomorrow", "next week".
-  const specificDate = parseDateString(text, now) || parseDateString(text.toLowerCase(), now);
-  const dateWindow = !specificDate ? parseDateWindowHeuristic(text, now) : null;
+  const specificDate = parseDateString(parseText, now) || parseDateString(parseText.toLowerCase(), now);
+  const dateWindow = !specificDate ? parseDateWindowHeuristic(parseText, now) : null;
   const date = specificDate || dateWindow?.start;
-  const timeObj = parseTimeFromText(text);
+  const timeObj = parseTimeFromText(parseText);
 
   if (date || timeObj) {
     const baseDate = date || now;
@@ -1117,23 +1125,34 @@ function extractFirstJsonObject(text) {
   return raw.slice(start, end + 1);
 }
 
-async function inferWithModel({ ollama, message }) {
+async function inferWithModel({ ollama, message, now = new Date() } = {}) {
   if (!ollama?.generate) return null;
 
+  const todayISO = now.toISOString();
+  const todayLabel = now.toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
   const prompt = [
-    'You are a calendar assistant AI. Convert the user message into structured intent JSON for a calendar assistant.',
-    'Always return valid JSON. No markdown or extra text.',
+    `You are a calendar assistant AI. Today is ${todayLabel} (${todayISO}).`,
+    'Convert the user message into structured intent JSON for a calendar assistant.',
+    'Always return valid JSON only. No markdown, no extra text, no explanation.',
+    '',
     'Instructions:',
-    '- Always return a JSON object with the specified fields',
-    '- If uncertain, default to kind="calendar" and set minimal fields',
-    '- For greetings/smalltalk, set kind="smalltalk"',
-    '- Extract time expressions, date ranges, search terms, and person names when mentioned',
-    '- Identify if user wants counts, next events, all-day events, or cancelled events',
+    '- Return a JSON object with ALL fields from the schema below.',
+    '- Set "action" to "delete", "update", "create", or "query" (default).',
+    '- For greetings/smalltalk set kind="smalltalk", action="query".',
+    '- For delete: set eventRef to the event title the user mentioned.',
+    '- For update: set eventRef to the event title, and EITHER targetDateTime (full ISO-8601, resolved from today) OR targetDateOnly (YYYY-MM-DD if time unchanged). Also set newTitle if renaming.',
+    '- For create: set eventTitle and targetDateTime (resolved ISO-8601).',
+    '- Resolve ALL relative dates ("tomorrow", "next Monday", "next week") into absolute ISO-8601 using today\'s date above.',
+    '- If uncertain about action, default to "query".',
     '',
     'JSON Schema:',
     '{',
     '  "kind": "smalltalk" | "calendar",',
-    '  "reply": "string (only for smalltalk)",',
+    '  "action": "query" | "create" | "update" | "delete",',
+    '  "reply": "string (only for smalltalk kind)",',
     '  "count": boolean,',
     '  "next": boolean,',
     '  "allDay": boolean,',
@@ -1142,18 +1161,36 @@ async function inferWithModel({ ollama, message }) {
     '  "dateRange": {"start":"ISO-8601","end":"ISO-8601","label":"string"} | null,',
     '  "searchPhrases": ["string"],',
     '  "personTerms": ["string"],',
-    '  "duration": {"op":"eq|gt|lt|gte|lte","minutes":number} | null',
+    '  "duration": {"op":"eq|gt|lt|gte|lte","minutes":number} | null,',
+    '  "eventRef": "string — exact event name/title to find for update or delete",',
+    '  "targetDateTime": "ISO-8601 datetime — new start time for update or create (resolve relative dates!)",',
+    '  "targetDateOnly": "YYYY-MM-DD — use when only the date changes, time stays the same",',
+    '  "newTitle": "string — new title when renaming an event",',
+    '  "eventTitle": "string — title for the new event when creating",',
+    '  "eventDuration": number | null',
     '}',
     '',
     'Examples:',
     'User: "Hello!"',
-    'Response: {"kind":"smalltalk","reply":"Hello! How can I help you with your calendar today?","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null}',
+    'Response: {"kind":"smalltalk","action":"query","reply":"Hello! How can I help you with your calendar today?","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
     '',
     'User: "Show me meetings with John next week"',
-    'Response: {"kind":"calendar","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"next week","dateRange":null,"searchPhrases":["meetings with John"],"personTerms":["John"],"duration":null}',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"next week","dateRange":null,"searchPhrases":["meetings with John"],"personTerms":["John"],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Delete my team standup"',
+    'Response: {"kind":"calendar","action":"delete","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"team standup","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Move my 3pm standup to 5pm today"',
+    'Response: {"kind":"calendar","action":"update","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"standup","targetDateTime":"' + new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0).toISOString() + '","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Reschedule my doctor appointment to next Friday"',
+    'Response: {"kind":"calendar","action":"update","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"doctor appointment","targetDateTime":"","targetDateOnly":"RESOLVE_NEXT_FRIDAY_YYYY-MM-DD","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Create a team meeting tomorrow at 2 PM for 30 minutes"',
+    'Response: {"kind":"calendar","action":"create","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"' + new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 14, 0).toISOString() + '","targetDateOnly":"","newTitle":"","eventTitle":"team meeting","eventDuration":30}',
     '',
     'User: "How many events do I have today?"',
-    'Response: {"kind":"calendar","reply":"","count":true,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"today","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null}',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":true,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"today","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
     '',
     'User message: ' + message,
   ].join('\n');
@@ -1162,7 +1199,7 @@ async function inferWithModel({ ollama, message }) {
     const response = await ollama.generate({ prompt });
     const jsonText = ollama.extractFirstJsonObject ? ollama.extractFirstJsonObject(response) : extractFirstJsonObject(response);
     if (!jsonText) {
-      console.log('[chat.debug] Failed to extract JSON from LLM response:', response);
+      console.log('[chat.debug] Failed to extract JSON from LLM response:', response?.slice(0, 300));
       return null;
     }
 
@@ -1170,12 +1207,14 @@ async function inferWithModel({ ollama, message }) {
     try {
       parsed = JSON.parse(jsonText);
     } catch (parseError) {
-      console.log('[chat.debug] Failed to parse JSON from LLM response:', jsonText);
+      console.log('[chat.debug] Failed to parse JSON from LLM response:', jsonText?.slice(0, 300));
       return null;
     }
 
+    const validActions = ['query', 'create', 'update', 'delete'];
     const result = {
       kind: (parsed?.kind === 'smalltalk' || parsed?.kind === 'calendar') ? parsed.kind : 'calendar',
+      action: validActions.includes(parsed?.action) ? parsed.action : 'query',
       reply: typeof parsed?.reply === 'string' ? parsed.reply.trim() : '',
       count: Boolean(parsed?.count),
       next: Boolean(parsed?.next),
@@ -1186,6 +1225,13 @@ async function inferWithModel({ ollama, message }) {
       searchPhrases: Array.isArray(parsed?.searchPhrases) ? parsed.searchPhrases.filter((x) => typeof x === 'string') : [],
       personTerms: Array.isArray(parsed?.personTerms) ? parsed.personTerms.filter((x) => typeof x === 'string') : [],
       duration: null,
+      // Mutation fields
+      eventRef: typeof parsed?.eventRef === 'string' ? parsed.eventRef.trim() : '',
+      targetDateTime: typeof parsed?.targetDateTime === 'string' ? parsed.targetDateTime.trim() : '',
+      targetDateOnly: typeof parsed?.targetDateOnly === 'string' ? parsed.targetDateOnly.trim() : '',
+      newTitle: typeof parsed?.newTitle === 'string' ? parsed.newTitle.trim() : '',
+      eventTitle: typeof parsed?.eventTitle === 'string' ? parsed.eventTitle.trim() : '',
+      eventDuration: (typeof parsed?.eventDuration === 'number' && parsed.eventDuration > 0) ? parsed.eventDuration : null,
     };
 
     if (parsed?.duration && typeof parsed.duration === 'object') {
@@ -1208,7 +1254,7 @@ async function inferWithModel({ ollama, message }) {
       }
     }
 
-    console.log('[chat.debug] LLM intent result:', result);
+    console.log('[chat.debug] LLM intent result:', JSON.stringify(result));
     return result;
   } catch (error) {
     console.log('[chat.debug] LLM intent error:', error?.message || error);
@@ -1366,7 +1412,7 @@ function createChatRouter({
               const updates = { ...pendingAction.updates };
               delete updates._newDate;
 
-              // If we only have a date change, fetch existing event to preserve time
+              // Case 1: Date-only change — fetch existing event to preserve original time-of-day
               if (pendingAction.updates._newDate && !pendingAction.updates.start) {
                 try {
                   const existing = await gcal.events.get({ calendarId: 'primary', eventId: pendingAction.eventId });
@@ -1384,8 +1430,23 @@ function createChatRouter({
                 } catch (_) { /* use what we have */ }
               }
 
+              // Case 2: New start time provided but no end — preserve existing event duration
+              if (updates.start?.dateTime && !updates.end) {
+                try {
+                  const existing = await gcal.events.get({ calendarId: 'primary', eventId: pendingAction.eventId });
+                  const existingStart = existing.data.start?.dateTime;
+                  const existingEnd = existing.data.end?.dateTime;
+                  if (existingStart && existingEnd) {
+                    const duration = new Date(existingEnd).getTime() - new Date(existingStart).getTime();
+                    updates.end = { dateTime: new Date(new Date(updates.start.dateTime).getTime() + duration).toISOString() };
+                  }
+                } catch (_) { /* proceed without end — Google Calendar will keep existing */ }
+              }
+
               const resp = await gcal.events.patch({ calendarId: 'primary', eventId: pendingAction.eventId, requestBody: updates });
+              // Sync updated event to MongoDB immediately
               if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_update' });
+              // Full refresh to keep MongoDB in sync with Google Calendar
               await calendarOps.refreshAndPersistLatest(req);
               return res.json({
                 reply: `Done! I've updated "${pendingAction.eventSummary}" — the changes are saved in Google Calendar and synced locally.`,
@@ -1400,12 +1461,23 @@ function createChatRouter({
         }
       }
 
-      // 2. Check for new mutation intents (create / delete / update)
-      if (collection) {
-        const mutationIntent = detectMutationIntent(message);
+      // 2. Early LLM inference — runs before mutations so intent drives both paths
+      const now = new Date();
+      const useLlmIntent = process.env.CHAT_USE_LLM_INTENT === 'true';
+      const llmIntent = useLlmIntent ? await inferWithModel({ ollama, message, now }) : null;
 
-        if (mutationIntent.action === 'delete') {
-          const eventRef = extractEventRefFromMessage(message, 'delete');
+      // 3. Check for mutation intents — prefer LLM action, fall back to regex
+      if (collection) {
+        const regexMutationIntent = detectMutationIntent(message);
+        const effectiveAction = (llmIntent?.action && llmIntent.action !== 'query')
+          ? llmIntent.action
+          : regexMutationIntent.action;
+
+        if (effectiveAction === 'delete') {
+          // Prefer LLM-extracted event name; fall back to regex stripping
+          const eventRef = llmIntent?.eventRef?.trim()
+            ? llmIntent.eventRef.trim()
+            : extractEventRefFromMessage(message, 'delete');
           const refTokens = tokenizeQuery(eventRef || message);
 
           if (!refTokens.length) {
@@ -1452,9 +1524,21 @@ function createChatRouter({
           return res.json({ reply: `I found multiple events matching "${eventRef}":\n\n${list}\n\nPlease be more specific — which one do you want to delete?` });
         }
 
-        if (mutationIntent.action === 'create') {
-          const now = new Date();
+        if (effectiveAction === 'create') {
           const eventDetails = parseCreateEventDetails(message, now);
+
+          // Override with LLM-parsed data when available and valid
+          if (llmIntent?.eventTitle?.trim()) {
+            eventDetails.summary = llmIntent.eventTitle.trim();
+          }
+          if (llmIntent?.targetDateTime) {
+            const llmStart = new Date(llmIntent.targetDateTime);
+            if (!isNaN(llmStart.getTime())) {
+              const durMins = llmIntent.eventDuration || parseDurationFromText(message);
+              eventDetails.startDateTime = llmStart.toISOString();
+              eventDetails.endDateTime = new Date(llmStart.getTime() + durMins * 60000).toISOString();
+            }
+          }
 
           if (!eventDetails.summary) {
             return res.json({ reply: 'I\'d be happy to create an event! Please include:\n• A name/title\n• Date (e.g. "tomorrow", "April 5")\n• Time (e.g. "at 3 PM")\n\nExample: "Create a team meeting on April 5 at 2 PM"' });
@@ -1493,11 +1577,34 @@ function createChatRouter({
           }
         }
 
-        if (mutationIntent.action === 'update') {
-          const now = new Date();
-          const eventRef = extractEventRefFromMessage(message, 'update');
+        if (effectiveAction === 'update') {
+          // Prefer LLM-extracted event name; fall back to regex stripping
+          const eventRef = llmIntent?.eventRef?.trim()
+            ? llmIntent.eventRef.trim()
+            : extractEventRefFromMessage(message, 'update');
           const refTokens = tokenizeQuery(eventRef || message);
           const updates = parseUpdateEventDetails(message, now);
+
+          // Override with LLM datetime when available — always more accurate than regex
+          if (llmIntent?.targetDateTime) {
+            const llmStart = new Date(llmIntent.targetDateTime);
+            if (!isNaN(llmStart.getTime())) {
+              updates.start = { dateTime: llmStart.toISOString() };
+              // end will be preserved from existing event duration in confirmation handler
+              delete updates._newDate;
+              delete updates.end;
+            }
+          } else if (llmIntent?.targetDateOnly) {
+            const d = new Date(`${llmIntent.targetDateOnly}T00:00:00`);
+            if (!isNaN(d.getTime())) {
+              updates._newDate = d;
+              delete updates.start;
+              delete updates.end;
+            }
+          }
+          if (llmIntent?.newTitle?.trim()) {
+            updates.summary = llmIntent.newTitle.trim();
+          }
 
           if (!refTokens.length) {
             return res.json({ reply: 'Which event would you like to update? Please include the event name.' });
@@ -1600,8 +1707,7 @@ function createChatRouter({
       if (!collection) return res.status(503).json({ message: 'Database not ready yet.' });
 
       const intent = detectIntent(message);
-      const useLlmIntent = process.env.CHAT_USE_LLM_INTENT === 'true';
-      const llmIntent = useLlmIntent ? await inferWithModel({ ollama, message }) : null;
+      // useLlmIntent, llmIntent, and now were declared earlier before mutation handling
 
       if ((intent.isGreeting || llmIntent?.kind === 'smalltalk') && !looksCalendarQuestion(message)) {
         return res.json({ reply: smallTalkReply(message, llmIntent?.reply) });
@@ -1629,7 +1735,7 @@ function createChatRouter({
         status: effectiveIntent.wantsCancelled ? 'cancelled' : { $ne: 'cancelled' },
       };
 
-      const now = new Date();
+      // now was declared earlier before mutation handling
       let window =
         parseDateWindowHeuristic(message, now) ||
         parseDateWindowFromLlmIntent(llmIntent, now);

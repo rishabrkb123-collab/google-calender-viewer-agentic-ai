@@ -959,6 +959,12 @@ async function searchStoredEvents({
   };
 }
 
+// Trust Render's (and other reverse proxy) forwarded headers so that
+// req.secure is true on HTTPS and session cookies work correctly.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(
   session({
     secret: SESSION_SECRET,
@@ -967,6 +973,9 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
+      // Render and most cloud hosts terminate TLS at the proxy level.
+      // secure:true requires trust proxy above so Express sees req.secure=true.
+      secure: process.env.NODE_ENV === 'production',
     },
   })
 );

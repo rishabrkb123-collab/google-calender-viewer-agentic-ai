@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: google-calendar-viewer
+    env: node
+    plan: free
+    buildCommand: npm install && npm --prefix client install && npm --prefix client run build
+    startCommand: npm start
+    healthCheckPath: /api/local/me
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # All other secrets (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET,
+      # MONGODB_URI, OLLAMA_BASE_URL, etc.) must be set in the Render Dashboard
+      # under Environment → Add Environment Variable.
+      #
+      # IMPORTANT: Set GOOGLE_REDIRECT_URI to:
+      #   https://<your-app-name>.onrender.com/oauth2callback
+      # and add that same URL as an Authorized Redirect URI in Google Cloud Console.

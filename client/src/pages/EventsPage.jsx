@@ -1,6 +1,21 @@
 ﻿import React, { useEffect, useState } from 'react';
 import Card from '../components/ui/Card.jsx';
 
+function formatDate(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const d = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState([]);
 
@@ -27,7 +42,7 @@ export default function EventsPage() {
           <Card className="event-card" key={event.id}>
             <div className="event-title">
               <h4 className="truncate">{event.summary || '(No title)'}</h4>
-              <span className="muted truncate">{event.start || ''}</span>
+              <span className="muted truncate">{formatDate(event.start)}</span>
             </div>
             <p className="muted break">{event.description || 'No description provided.'}</p>
           </Card>

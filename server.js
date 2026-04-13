@@ -1723,13 +1723,20 @@ app.patch('/api/events/:eventId', requireLocalAuth, async (req, res) => {
       return res.status(400).json({ message: 'No editable fields provided.' });
     }
 
+    const email = await getSessionEmail(req, { forceRefresh: true });
     const calendar = google.calendar({ version: 'v3', auth: getOAuthClientForRequest(req) });
-    await calendar.events.patch({
+    const patchResp = await calendar.events.patch({
       calendarId: 'primary',
       eventId: req.params.eventId,
       sendUpdates,
       requestBody,
     });
+
+    // Immediately sync the patched event to MongoDB so it's up-to-date regardless
+    // of whether the broad refreshAndPersistLatest window covers this event.
+    if (email && patchResp?.data) {
+      await upsertFullEvents(email, 'primary', [patchResp.data], { source: 'direct_patch' });
+    }
 
     const latest = await refreshAndPersistLatest(req);
     return res.json({ ok: true, latest });

@@ -1,0 +1,582 @@
+====================================================================
+  500 TARGETED SAMPLE QUESTIONS — CHATBOT OPTIMIZATION v2
+  Project: Google Calendar Viewer Agentic Chatbot
+  Based on: Observed conversation failures + edge-case analysis
+  Generated: 2026-04-11
+====================================================================
+
+------------------------------------------------------------------------
+CATEGORY A: DAY-OF-WEEK QUERIES — SINGULAR vs. PLURAL vs. SPECIFIC
+(Questions 1–80)
+Issues addressed: "on saturday" returning 0, inconsistent singular/plural handling
+------------------------------------------------------------------------
+
+1.  How many events do I have on Saturday?
+2.  How many events do I have on Saturdays?
+3.  Show me all events on Saturday.
+4.  Show me all events on Saturdays.
+5.  List my events on Sunday.
+6.  Do I have anything on Monday?
+7.  What events fall on a Friday?
+8.  Show me everything on Tuesdays.
+9.  Are there events on Wednesdays?
+10. List all Thursday events.
+11. How many events are on a Monday?
+12. How many events happen on Fridays?
+13. What's on my calendar every Sunday?
+14. Show all my Tuesday appointments.
+15. List events that occur on Mondays.
+16. Do I have recurring events on Wednesday?
+17. How many Saturday events do I have?
+18. Show me Sunday events.
+19. List all events that land on a Friday.
+20. What do I have on Thursdays?
+21. Show me this Saturday's events.
+22. What's on next Saturday?
+23. List events for last Saturday.
+24. What happened on last Monday?
+25. What's on next Friday?
+26. Show me this Sunday's schedule.
+27. What events are on next Monday?
+28. List events for last Friday.
+29. What do I have this Thursday?
+30. Show me next Wednesday's events.
+31. Do I have anything this Tuesday?
+32. What's scheduled for next Sunday?
+33. Show me last Wednesday's events.
+34. List events for this Friday.
+35. What did I have last Thursday?
+36. On what days do I have the most events?
+37. Which day of the week is the busiest?
+38. Do I have more events on weekdays or weekends?
+39. How many events are on weekends total?
+40. Show me all my weekend events.
+41. List events that happen on weekdays.
+42. Do I have any events every Monday this month?
+43. Show me all Saturdays with events.
+44. Which Fridays have events this year?
+45. List every Monday event in April.
+46. What events are on the 5th?
+47. What events do I have on the 20th?
+48. List events on the 1st of each month.
+49. Show me events on the 15th.
+50. What's on the 30th?
+51. Show me events on Mondays in May.
+52. List Tuesday events in June.
+53. What Wednesday events do I have in July?
+54. Show Thursday events for August.
+55. List Friday events in September.
+56. What Sunday events are in October?
+57. Show Saturday events for November.
+58. List Monday events in December.
+59. What Tuesday events are in January 2027?
+60. Show Wednesday events for February 2027.
+61. How many events do I have on Fridays this month?
+62. What's my Saturday schedule for next month?
+63. Show me events on Mondays this week.
+64. List Tuesday events from last week.
+65. What Wednesday events do I have this week?
+66. Show Thursday events for next week.
+67. What Friday events are coming up?
+68. Do I have a Saturday event this year?
+69. List all events on the last Saturday of the month.
+70. What's on the first Monday of next month?
+71. Show me events on the third Thursday of April.
+72. List events on every other Monday.
+73. What's scheduled for the second Tuesday of May?
+74. Show events on the last Friday of the year.
+75. List events on the first Sunday of each month.
+76. On which Saturday do I have the most events?
+77. Show me my Sunday schedule for this month.
+78. What events do I have every Wednesday this quarter?
+79. List all Monday events across all years.
+80. Which day of the week do I have the fewest events?
+
+------------------------------------------------------------------------
+CATEGORY B: CONTEXT FOLLOW-UP QUERIES
+(Questions 81–160)
+Issues addressed: "show me these events" failing, follow-up with content tokens
+------------------------------------------------------------------------
+
+81.  Show me these events.
+82.  List those events again.
+83.  Show them to me.
+84.  Tell me more about those.
+85.  Give me details on these.
+86.  What are those events?
+87.  Show me those events on Saturdays.
+88.  Which of these are on a weekday?
+89.  Filter those for next month.
+90.  Show me these events scheduled for Saturdays.
+91.  Which of them have a description?
+92.  How many of those are upcoming?
+93.  Which of these have a location?
+94.  Are any of those all-day events?
+95.  Show me only the ones in April.
+96.  Which of those start in the morning?
+97.  Filter these to show only meetings.
+98.  List those events sorted by date.
+99.  Show those that are longer than 1 hour.
+100. Which of these events have attendees?
+101. Show me the first one again.
+102. Tell me about the last one.
+103. Give me details on that event.
+104. What time does it start?
+105. Where is it held?
+106. Who is invited to that?
+107. What's the description of the first one?
+108. When does the last one end?
+109. Can you reschedule that one?
+110. Delete the first one.
+111. Move the last one to next week.
+112. Rename that event.
+113. Update the location of that one.
+114. Add a description to that event.
+115. Which of those events have no description?
+116. Show me those events with a location.
+117. Filter those to only all-day events.
+118. Which of them are recurring?
+119. List those events without attendees.
+120. Show me the online ones.
+121. How many of those are this week?
+122. Which of those are after 5pm?
+123. Show me the ones starting before 9am.
+124. Are any of those on a Monday?
+125. Which of these are on Saturdays?
+126. Filter those for Fridays only.
+127. Show me those events happening next month.
+128. Which of those are in the morning?
+129. List these events by time.
+130. Sort those by duration.
+131. Show me the longest one.
+132. Which one is the shortest?
+133. Is any of those a birthday?
+134. Which of those are doctor appointments?
+135. Show me the work-related ones.
+136. Which of those have Google Meet links?
+137. List those with video calls.
+138. Which of those are at the office?
+139. Show me the remote ones.
+140. Are any of those cancelled?
+141. Which ones did I create?
+142. Show me those I haven't responded to.
+143. Which of those did someone else organize?
+144. Are any of those private?
+145. Show me the public ones from that list.
+146. Which of those are longer than 2 hours?
+147. Filter those to events under 30 minutes.
+148. Show me those happening on weekends.
+149. Which of those are on weekdays?
+150. Delete those events.
+151. Move all of those to next week.
+152. Cancel the ones in the past.
+153. Remove the shortest one.
+154. Delete the longest event from that list.
+155. Schedule a follow-up for those meetings.
+156. Add a description to all of those.
+157. Update the location of each of those.
+158. What's the total duration of those events?
+159. How long do those meetings take in total?
+160. Show me only the ones I haven't attended yet.
+
+------------------------------------------------------------------------
+CATEGORY C: CURRENT DATE / TIME / CALENDAR STATE QUERIES
+(Questions 161–220)
+Issues addressed: "what is the current date time" → no answer
+------------------------------------------------------------------------
+
+161. What is the current date and time?
+162. What time is it?
+163. What's the current time?
+164. What day is today?
+165. What is today's date?
+166. What's today's date?
+167. What is the date today?
+168. What day of the week is today?
+169. What is the current date?
+170. Tell me the current date and time.
+171. What year is it?
+172. What month are we in?
+173. What week of the year is this?
+174. What quarter are we in?
+175. What's the time right now?
+176. What time is it now?
+177. Can you tell me the current date?
+178. What is today?
+179. Is today a weekday?
+180. Is today the weekend?
+181. What time zone is the calendar using?
+182. What is the server's current time?
+183. How many days are left in this month?
+184. How many days are left in this year?
+185. How many days until the end of the quarter?
+186. How many events have I had this year so far?
+187. How many events do I have left this month?
+188. How many events are remaining this week?
+189. What's the next upcoming event from now?
+190. What is my next event today?
+191. Is there anything happening right now?
+192. Do I have an event in progress?
+193. What event am I in right now?
+194. Has any event started in the last 30 minutes?
+195. What just ended?
+196. What ended in the last hour?
+197. What event starts in the next hour?
+198. What starts in 30 minutes?
+199. What's coming up in the next 2 hours?
+200. Do I have a meeting soon?
+201. When is my next break?
+202. How much time until my next event?
+203. When does my next event start?
+204. How long until my next meeting?
+205. Is today a holiday on my calendar?
+206. What public holidays are on my calendar?
+207. Do I have any birthdays today?
+208. Whose birthday is today?
+209. Are there any anniversaries today?
+210. What important dates are coming up?
+211. What's the first event on my calendar ever?
+212. What's the latest event ever on my calendar?
+213. How long is my calendar history?
+214. How old is my oldest event?
+215. What was my first ever calendar event?
+216. Am I currently busy?
+217. Am I free for the next hour?
+218. When is my next free slot today?
+219. Am I available this afternoon?
+220. When am I free this week?
+
+------------------------------------------------------------------------
+CATEGORY D: EDGE-CASE DATE QUERIES
+(Questions 221–300)
+Issues addressed: ambiguous dates, cross-year references, relative multi-step
+------------------------------------------------------------------------
+
+221. Show me events in 2027.
+222. What events do I have in 2028?
+223. List all events in 2029.
+224. Show me events from 2024.
+225. What was on my calendar in 2023?
+226. List events for the first half of 2026.
+227. Show me second half of 2026 events.
+228. What events are in the last 3 months?
+229. Show me events from the past 6 months.
+230. List events from the next 3 months.
+231. Show me events in the coming 2 weeks.
+232. What do I have in the next 10 days?
+233. List events from the last 7 days.
+234. What happened in the last 30 days?
+235. Show events from the past year.
+236. What events are between April 1 and April 30?
+237. List events from March 15 to April 15.
+238. Show events between 2026-01-01 and 2026-06-30.
+239. What do I have from now until end of year?
+240. List events from today to next Friday.
+241. Show me events between now and April 30th.
+242. What's on my calendar after June?
+243. Show events before August 2026.
+244. List everything after 2026.
+245. What events are before today?
+246. Show me past events only.
+247. List only future events.
+248. What events are between 9am and 5pm today?
+249. Show me morning events this week (before noon).
+250. List afternoon events tomorrow.
+251. What evening events do I have this week?
+252. Show events starting after 6pm this week.
+253. List early morning events (before 8am) this month.
+254. What late-night events do I have?
+255. Show events that start at exactly noon.
+256. List events between 2pm and 4pm this week.
+257. What meetings do I have in the first week of May?
+258. Show events in the last week of December.
+259. List events in the middle of April.
+260. What's on my calendar during spring?
+261. Show summer events (June, July, August).
+262. List fall/autumn events.
+263. Show me winter events.
+264. What events are on bank holidays?
+265. Show me events around Easter.
+266. List events near Christmas.
+267. What do I have around New Year?
+268. Show me events on the day before a holiday.
+269. List events the week after my birthday.
+270. What events are on or after April 20th?
+271. Show events on or before April 30th.
+272. List events from April 11 onwards.
+273. What's on my calendar starting from today?
+274. Show events up to December 31st.
+275. List events happening in the next half-year.
+276. What do I have in Q1 2027?
+277. Show Q2 2026 events.
+278. List Q3 events this year.
+279. What's in Q4?
+280. Show me this quarter's events.
+281. List next quarter's schedule.
+282. What happened last quarter?
+283. Show me events two quarters from now.
+284. List events three months ago.
+285. What do I have six months from now?
+286. Show events exactly one year from today.
+287. List events on the same date next year.
+288. What was on my calendar this time last year?
+289. Show events from a year ago today.
+290. List events on my birthday this year.
+291. What do I have on New Year's Day 2027?
+292. Show events on December 25th, 2026.
+293. List events on January 1st, 2027.
+294. What's on April 30, 2026?
+295. Show me events on 05/20/2026.
+296. List events on 2026-12-31.
+297. What do I have on the last day of March?
+298. Show events on the first day of next month.
+299. List events on the last day of the year.
+300. What's on my calendar on 4/1/2029?
+
+------------------------------------------------------------------------
+CATEGORY E: COUNT AND STATISTICS QUERIES
+(Questions 301–360)
+Issues addressed: count returning wrong numbers, statistics not available
+------------------------------------------------------------------------
+
+301. How many events do I have in total?
+302. What is the total number of events on my calendar?
+303. How many events do I have this year?
+304. How many events in 2026?
+305. How many events do I have next month?
+306. How many events did I have last month?
+307. How many events are scheduled for next week?
+308. How many events happened last week?
+309. How many events do I have today?
+310. How many events are coming up tomorrow?
+311. How many events do I have on Mondays?
+312. How many events are on Saturdays total?
+313. How many all-day events do I have?
+314. How many timed events are there?
+315. How many events last more than 2 hours?
+316. How many events are under 30 minutes?
+317. How many events have a location?
+318. How many events have no description?
+319. How many events have attendees?
+320. How many events have a Google Meet link?
+321. How many events do I have with John?
+322. How many recurring events are on my calendar?
+323. How many one-time events do I have?
+324. How many events did I create myself?
+325. How many events was I invited to?
+326. How many events am I the organizer of?
+327. How many events did I decline?
+328. How many events did I accept?
+329. How many events have I not responded to?
+330. How many events are marked as busy?
+331. How many events are marked as free?
+332. How many events are private?
+333. How many public events do I have?
+334. How many events are in the morning?
+335. How many afternoon events do I have?
+336. How many evening events are there?
+337. How many weekend events do I have?
+338. How many weekday events?
+339. How many events are at the office?
+340. How many remote meetings do I have?
+341. Count events with "standup" in the title.
+342. How many events have "review" in the name?
+343. Count all events with "sync" in the title.
+344. How many birthdays are on my calendar?
+345. How many doctor appointments do I have?
+346. How many events are in April vs May?
+347. Which month has the most events?
+348. Which week this year has the most events?
+349. How many events do I have per week on average?
+350. What is my average number of daily events?
+351. How many events are exactly 1 hour long?
+352. How many are 30 minutes?
+353. How many half-day events do I have?
+354. How many full-day events?
+355. How many events start before 9am?
+356. How many events start after 6pm?
+357. How many events start at 10am?
+358. How many events have been cancelled?
+359. How many events were deleted?
+360. How many events overlap with each other this week?
+
+------------------------------------------------------------------------
+CATEGORY F: COMPLEX UPDATE AND MUTATION QUERIES
+(Questions 361–430)
+Issues addressed: rename not working, description/location update, edge cases
+------------------------------------------------------------------------
+
+361. Rename the "sample" event to "Important Meeting".
+362. Change the name of the event "Nose checkup" to "ENT Appointment".
+363. Rename "Heart" to "Cardiology Review".
+364. Change the title of "simpul" to "Team Standup".
+365. Rename my next event to "Daily Standup".
+366. Update the description of "sample" to "Monthly review meeting".
+367. Add a description to the "Heart" event: "Bring test results".
+368. Change the notes for "simpul" to "Agenda: Q2 goals".
+369. Add an agenda to the "Nose checkup" event.
+370. Update the description of my next event.
+371. Change the location of "sample" to "Conference Room B".
+372. Update the venue for "Nose checkup" to "City Hospital, Room 3".
+373. Set the location of "Heart" to "St. Mary's Clinic".
+374. Move the "simpul" event location to Zoom.
+375. Change the location of my next meeting to "online".
+376. Move "sample" to January 1st, 2080 at 10am.
+377. Reschedule "Nose checkup" to next Friday at 2pm.
+378. Shift "Heart" to April 1st, 2029 at 5pm.
+379. Move "simpul" to tomorrow at 9am.
+380. Reschedule the last event to next month.
+381. Move "sample" one week later.
+382. Push "Nose checkup" back 30 minutes.
+383. Bring "Heart" forward by one hour.
+384. Extend "simpul" by 30 minutes.
+385. Shorten "sample" to 30 minutes.
+386. Change the start time of "Nose checkup" to 10am.
+387. Update "Heart" to be an all-day event.
+388. Remove the all-day flag from "simpul".
+389. Update the time of "sample" to 3:30pm.
+390. Change "Nose checkup" to start at noon.
+391. Move "sample" from Saturday to Monday.
+392. Change "Heart" from Sunday to Friday.
+393. Shift "simpul" from December to January.
+394. Move "Nose checkup" to the first available slot next week.
+395. Reschedule "Heart" to two weeks from today.
+396. Rename "sample" AND move it to Friday.
+397. Change title of "Nose checkup" and update location.
+398. Update description and time of "Heart".
+399. Rename "simpul" and change the description.
+400. Move "sample" and add a Google Meet link.
+401. Delete "sample".
+402. Remove "Nose checkup" from my calendar.
+403. Cancel "Heart".
+404. Delete "simpul".
+405. Remove my next event.
+406. Delete all events in 2080.
+407. Cancel all events in 2027.
+408. Delete everything in January 2027.
+409. Remove events in April 2029.
+410. Cancel "sample" but keep "Heart".
+411. Create a new event called "Budget Review" on May 1st at 10am.
+412. Schedule a "Team Sync" for next Monday at 2pm.
+413. Add a doctor appointment for next Thursday at 11am.
+414. Create an all-day event on April 25th called "Company Holiday".
+415. Schedule a 30-minute call tomorrow at 3pm.
+416. Add a recurring standup every Monday at 9am.
+417. Create a weekly meeting on Fridays at 4pm.
+418. Schedule a monthly review on the first Monday of each month.
+419. Add a birthday reminder for April 20th all day.
+420. Create a 2-hour workshop on April 15th from 9am to 11am.
+421. Create an event and invite john@example.com.
+422. Schedule a meeting with Sarah and Mike.
+423. Add a team call with description "Discuss Q2 roadmap".
+424. Create an event at "Main Conference Room A".
+425. Schedule a Zoom meeting tomorrow at 2pm.
+426. Move "sample" to April 1st, 2080 and rename it "Future Meeting".
+427. Reschedule "Nose checkup" to next Tuesday and update the location to "Downtown Clinic".
+428. Change the title of "Heart" to "Cardio Checkup" and move to Friday at 9am.
+429. Rename "simpul" to "Sprint Planning" and change time to Monday at 10am.
+430. Create a copy of "sample" for next week.
+
+------------------------------------------------------------------------
+CATEGORY G: SEARCH AND FILTER QUERIES
+(Questions 431–500)
+Issues addressed: keyword search, multi-field search, complex filters
+------------------------------------------------------------------------
+
+431. Find events with "checkup" in the title.
+432. Search for events containing "sample".
+433. Show events with "heart" in the name.
+434. Find "simpul" events.
+435. Search for any event with "nose" in it.
+436. Show me events related to doctors.
+437. Find events about health.
+438. List all medical appointments.
+439. Show events related to "review".
+440. Find events about meetings.
+441. Show events at "City Hospital".
+442. Find events at my office.
+443. List events with location "Zoom".
+444. Show events at the conference room.
+445. Find events where location includes "Room".
+446. Show events that have a description.
+447. Find events without a description.
+448. List events with a location set.
+449. Show events that have no location.
+450. Find events with attendees.
+451. Show events organized by me.
+452. Find events where John is invited.
+453. List events with Sarah as attendee.
+454. Show events from a specific organizer.
+455. Find events I was invited to but didn't organize.
+456. Show me the most recent event.
+457. Find the oldest event on my calendar.
+458. Show me the event furthest in the future.
+459. List events sorted by title alphabetically.
+460. Show events ordered by duration (longest first).
+461. Find the longest event on my calendar.
+462. Show the shortest event.
+463. List events that are exactly 1 hour.
+464. Show events longer than 3 hours.
+465. Find events shorter than 15 minutes.
+466. Show events on Saturdays in 2026.
+467. Find Saturday events in 2027.
+468. List Saturday events in December.
+469. Show events on Saturdays next month.
+470. Find all Saturday events this year.
+471. List Monday AND Tuesday events this week.
+472. Show me events on both Friday and Saturday.
+473. Find events on Thursdays in the morning.
+474. List afternoon events on Wednesdays.
+475. Show evening events on Fridays.
+476. Show events with "sample" title on a Saturday.
+477. Find "Heart" events in 2029.
+478. List "Nose checkup" and "Heart" events together.
+479. Show all events sorted by date.
+480. Find the event closest to today.
+481. Show me events I might have forgotten about.
+482. Find events without any details.
+483. List incomplete events (no location or description).
+484. Show events scheduled very far in the future (after 2050).
+485. Find events in 2080.
+486. Show events that span multiple days.
+487. Find events that last a full day.
+488. List all-day events this year.
+489. Show events that were recently added.
+490. Find events created in the last 7 days.
+491. Show events that start and end on the same day.
+492. Find events with the same title.
+493. List duplicate events.
+494. Show events with "meeting" in the title on Mondays.
+495. Find events with "call" in the name scheduled for Fridays.
+496. List events with "checkup" in the title in 2027.
+497. Show "review" events next quarter.
+498. Find events containing "sync" this month.
+499. List all events across all time sorted by date.
+500. Show me a summary of my entire calendar.
+
+====================================================================
+  END OF 500 TARGETED SAMPLE QUESTIONS v2
+====================================================================
+
+BREAKDOWN BY CATEGORY:
+  Category A – Day-of-Week Queries ........... Questions   1– 80  ( 80 questions)
+  Category B – Context Follow-Up Queries ..... Questions  81–160  ( 80 questions)
+  Category C – Date/Time/State Queries ....... Questions 161–220  ( 60 questions)
+  Category D – Edge-Case Date Queries ........ Questions 221–300  ( 80 questions)
+  Category E – Count and Statistics .......... Questions 301–360  ( 60 questions)
+  Category F – Complex Mutations ............. Questions 361–430  ( 70 questions)
+  Category G – Search and Filter ............. Questions 431–500  ( 70 questions)
+  TOTAL .......................................                      500 questions
+
+KNOWN BUGS THESE QUESTIONS EXPOSE:
+  1. "on saturday" (singular, no modifier) → was resolving to next Saturday window
+     instead of all-Saturday recurring filter  [FIXED in v2]
+  2. "show me these events scheduled for saturdays" → isContextFollowUp
+     required tokens.length === 0 but "scheduled/saturdays" are tokens [FIXED in v2]
+  3. "what is the current date time" → bypassed smallTalkReply via
+     looksCalendarQuestion, LLM said "I don't know" [FIXED in v2]
+  4. Plural "saturdays" worked by accident (LLM) but singular "saturday"
+     didn't; now both use explicit parseDayOfWeekFilter [FIXED in v2]
+  5. Text ranking filtered out ALL context-follow-up results when tokens
+     didn't match event names [FIXED in v2 — skipTextRank when isFollowUp]
+====================================================================

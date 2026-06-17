@@ -1,0 +1,550 @@
+====================================================================
+  500 SAMPLE QUESTIONS FOR GOOGLE CALENDAR AGENTIC CHATBOT RAG
+  Project: Google Calendar Viewer Agentic Chatbot
+  Generated: 2026-04-11
+====================================================================
+
+-----------------------------------------------------------------------
+CATEGORY 1: LIST / VIEW EVENTS (Questions 1–100)
+-----------------------------------------------------------------------
+
+1.  Show me all my events.
+2.  List all events.
+3.  What events do I have?
+4.  Show me everything on my calendar.
+5.  Display all my scheduled events.
+6.  Can you show me my full calendar?
+7.  What's on my calendar?
+8.  What are all my upcoming events?
+9.  Give me a list of all my events.
+10. Show me my complete schedule.
+11. List events for today.
+12. What events do I have today?
+13. Show me today's schedule.
+14. What's on my agenda for today?
+15. Do I have anything today?
+16. What meetings do I have today?
+17. Show me tomorrow's events.
+18. What do I have tomorrow?
+19. List tomorrow's schedule.
+20. What's happening tomorrow?
+21. Any events tomorrow?
+22. Show me this week's events.
+23. List all events this week.
+24. What do I have this week?
+25. Show me my schedule for the current week.
+26. What's on my calendar this week?
+27. List next week's events.
+28. What events do I have next week?
+29. Show me next week's schedule.
+30. What's coming up next week?
+31. Any events next week?
+32. Show me last week's events.
+33. What events did I have last week?
+34. List all events from last week.
+35. Show me events from the previous week.
+36. What happened on my calendar last week?
+37. Show me this month's events.
+38. List all events this month.
+39. What do I have scheduled this month?
+40. Show me April's events.
+41. List events for January.
+42. What events do I have in March?
+43. Show me all February events.
+44. What's on my calendar in June?
+45. List events in December.
+46. Show me November events.
+47. List events for next month.
+48. What events do I have next month?
+49. Show me last month's events.
+50. List all events from the previous month.
+51. Show me this year's events.
+52. List all events in 2026.
+53. What events do I have in 2025?
+54. Show me all events from 2024.
+55. What was on my calendar in 2023?
+56. List events for this quarter.
+57. Show me events for Q1.
+58. List all events in Q2.
+59. Show me Q3 events.
+60. List all meetings.
+61. Show me all my meetings.
+62. List all appointments.
+63. Show me all reminders.
+64. List all birthdays on my calendar.
+65. Show me all recurring events.
+66. List all all-day events.
+67. Show me events that last more than 2 hours.
+68. List short events under 30 minutes.
+69. Show me all events with a location.
+70. List events without a location.
+71. Show me events with attendees.
+72. List events I created.
+73. Show me events organized by someone else.
+74. List accepted events.
+75. Show me declined events.
+76. List events I haven't responded to.
+77. Show me events tagged as busy.
+78. List events marked as free.
+79. Show me events with video call links.
+80. List events that have descriptions.
+81. Show me events with attachments.
+82. List public events on my calendar.
+83. Show me private events.
+84. List events with John.
+85. Show me meetings with Sarah.
+86. List events where Mike is invited.
+87. Show me events where I am the organizer.
+88. List events at the office.
+89. Show me events at home.
+90. List events at the conference room.
+91. Show me events at Starbucks.
+92. List events in New York.
+93. Show me online events.
+94. List virtual meetings.
+95. Show me in-person events.
+96. List events containing the word "review".
+97. Show me events with "sync" in the title.
+98. List events related to "project".
+99. Show me events with "team" in the name.
+100. List all events with "standup" in the title.
+
+-----------------------------------------------------------------------
+CATEGORY 2: QUERY SPECIFIC EVENTS – WHEN / WHERE / WHAT (Questions 101–200)
+-----------------------------------------------------------------------
+
+101. When is my next event?
+102. What is my next meeting?
+103. When is my first event today?
+104. What time does my next appointment start?
+105. When does my first meeting begin tomorrow?
+106. What time is my event on Friday?
+107. When is the team standup?
+108. What time is the project review?
+109. When is the meeting with Sarah?
+110. What time is my appointment with the doctor?
+111. When is my dentist appointment?
+112. What time does the standup start?
+113. When is the next all-day event?
+114. What day is the quarterly review?
+115. When is the Sprint planning meeting?
+116. What time is the product demo?
+117. When does the conference call start?
+118. What time is the one-on-one with my manager?
+119. When is the next recurring meeting?
+120. What time is the board meeting?
+121. When is the birthday party?
+122. What day is the team lunch?
+123. When is the annual review?
+124. What time is the kickoff meeting?
+125. When does the training session start?
+126. What time is the interview scheduled?
+127. When is the performance review?
+128. What day is the wedding?
+129. When is the baby shower?
+130. What time is the dinner reservation?
+131. Where is my next meeting?
+132. What is the location of tomorrow's event?
+133. Where is the team standup held?
+134. What's the address for the doctor's appointment?
+135. Where is the conference being held?
+136. What room is the project review in?
+137. Where is the meeting with Sarah?
+138. What's the venue for the party?
+139. Where is the quarterly review?
+140. What location is set for my next event?
+141. How long is my next event?
+142. How many hours is the conference?
+143. What is the duration of the standup?
+144. How long does the team meeting last?
+145. Is the meeting tomorrow one hour or two?
+146. How many events do I have today?
+147. How many meetings are scheduled this week?
+148. How many events do I have in April?
+149. How many appointments do I have tomorrow?
+150. How many events are coming up this month?
+151. Who is invited to the team meeting?
+152. Who are the attendees for tomorrow's standup?
+153. Who is coming to the project review?
+154. Is John attending the meeting on Friday?
+155. Who organized the quarterly review?
+156. Who created the board meeting event?
+157. Is Sarah invited to the team lunch?
+158. Who is the host of the conference call?
+159. Are there any attendees for my next event?
+160. Who else is in my 3pm meeting?
+161. What is my busiest day this week?
+162. Which day has the most events?
+163. What time is the last event today?
+164. When does my last meeting end today?
+165. What's the first event next week?
+166. What's the last event this month?
+167. Do I have any free time today?
+168. Am I free on Thursday afternoon?
+169. Do I have a conflict on Monday?
+170. Are there any overlapping events tomorrow?
+171. Do I have anything between 2pm and 4pm today?
+172. Am I available on Friday morning?
+173. Is Tuesday afternoon free?
+174. Do I have anything scheduled at 10am?
+175. What's happening at 3pm tomorrow?
+176. Do I have an event called "weekly sync"?
+177. Is there a meeting called product demo this week?
+178. Do I have a standup tomorrow?
+179. Is there a dentist appointment on my calendar?
+180. Do I have any events with Google Meet links?
+181. What is the description of my next event?
+182. What's the agenda for tomorrow's meeting?
+183. What does the project review event say?
+184. What notes are on the team standup event?
+185. What's in the description of the board meeting?
+186. What is the event ID for today's standup?
+187. Can you show me the details of my 2pm meeting?
+188. Give me full details on tomorrow's first event.
+189. What are the details for the quarterly review?
+190. Tell me everything about the event on Friday at 3pm.
+191. Is the team meeting online or in person?
+192. Is tomorrow's appointment a video call?
+193. Is the Friday meeting remote or at the office?
+194. What's the Zoom link for today's meeting?
+195. Is there a Google Meet for tomorrow's standup?
+196. When was the last time I had a meeting with John?
+197. When is my next event after 5pm?
+198. What is my earliest event this week?
+199. Which events start before 9am this week?
+200. What events do I have after working hours?
+
+-----------------------------------------------------------------------
+CATEGORY 3: MODIFY / UPDATE / RESCHEDULE EVENTS (Questions 201–330)
+-----------------------------------------------------------------------
+
+201. Reschedule my standup to tomorrow.
+202. Move the team meeting to Friday.
+203. Change the project review to next week.
+204. Shift my 3pm meeting to 4pm.
+205. Move my doctor appointment to Monday.
+206. Reschedule the board meeting to next Thursday.
+207. Can you move the team lunch to Wednesday?
+208. Push the standup back one hour.
+209. Move tomorrow's meeting to next week.
+210. Reschedule the interview to Friday morning.
+211. Change the standup time to 9am.
+212. Update the meeting time to 2:30pm.
+213. Change the start time of the project review to 10am.
+214. Move the board meeting from 3pm to 5pm.
+215. Can you change tomorrow's event to start at 8am instead?
+216. Change the end time of my next meeting to 4pm.
+217. Update the duration of the standup to 30 minutes.
+218. Make the team meeting one hour longer.
+219. Shorten the project review by 30 minutes.
+220. Change the end time of today's last event to 6pm.
+221. Rename the standup to "Daily Sync".
+222. Change the title of tomorrow's meeting to "Sprint Review".
+223. Update the event name from "Team Call" to "Team Meeting".
+224. Rename the project review to "Product Review".
+225. Change the title of my next event to "One-on-One".
+226. Move the team meeting to a different day.
+227. Change the date of my dentist appointment to next Tuesday.
+228. Reschedule the birthday party to Saturday.
+229. Move the dinner reservation to Sunday.
+230. Change my appointment to the 15th of this month.
+231. Update the location of tomorrow's meeting to conference room B.
+232. Change the venue of the team lunch to the rooftop.
+233. Move the meeting location to Zoom.
+234. Update the address of the doctor's appointment.
+235. Change the location of the board meeting to Room 101.
+236. Add a description to the standup event.
+237. Update the agenda for tomorrow's meeting.
+238. Add notes to the project review.
+239. Edit the description of the team lunch.
+240. Update the meeting description to include the Zoom link.
+241. Add John to tomorrow's team meeting.
+242. Invite Sarah to the project review.
+243. Add mike@example.com to the standup.
+244. Remove John from the board meeting.
+245. Uninvite Sarah from the team lunch.
+246. Change the organizer of the team meeting.
+247. Update the attendees for the quarterly review.
+248. Add all team members to tomorrow's meeting.
+249. Remove all attendees from the project review.
+250. Change the standup to be a recurring event.
+251. Make the team meeting happen every Monday.
+252. Set the project review to repeat weekly.
+253. Change the recurring standup from daily to every other day.
+254. Stop the weekly sync from repeating.
+255. Make tomorrow's event an all-day event.
+256. Remove the all-day flag from the team meeting.
+257. Change the standup to start exactly at 9:00 AM.
+258. Move my event on April 15th to April 20th.
+259. Shift next Monday's events to Tuesday.
+260. Move all events on Friday to Thursday.
+261. Reschedule everything from next week to the week after.
+262. Move my 10am meeting 30 minutes earlier.
+263. Push the 2pm meeting 15 minutes later.
+264. Move the event that's at 3pm today to 5pm.
+265. Change the dentist appointment from Tuesday to Wednesday.
+266. Move my morning meeting to the afternoon.
+267. Shift the afternoon event to the morning.
+268. Change the conference call from Monday to Friday.
+269. Move the team meeting from this week to next week.
+270. Reschedule the workshop from March to April.
+271. Update the title and time of tomorrow's meeting.
+272. Change both the date and location of the standup.
+273. Update the time and add a description to the review.
+274. Rename and reschedule the project kickoff.
+275. Change the duration and location of the board meeting.
+276. Move the daily standup 10 minutes later every day.
+277. Reschedule the Friday meeting to Monday at the same time.
+278. Change the event on the 5th to the 10th.
+279. Move the meeting at 11am to 2pm tomorrow.
+280. Reschedule my next appointment to the day after tomorrow.
+281. Change the date of next week's review to this Friday.
+282. Can you move Thursday's event to Wednesday?
+283. Shift next month's conference to this month.
+284. Move the event from 9am to 11am on the same day.
+285. Update the calendar event for the team sync.
+286. Edit the event called "Product Demo".
+287. Modify the standup event.
+288. Update my appointment with the doctor.
+289. Make changes to the board meeting.
+290. Edit the recurring weekly meeting.
+291. Change the time zone for tomorrow's meeting to EST.
+292. Update the meeting to PST instead of UTC.
+293. Add a video call link to the standup.
+294. Add a Google Meet link to tomorrow's event.
+295. Remove the video call link from the meeting.
+296. Mark the standup as free in my calendar.
+297. Set the board meeting status to busy.
+298. Change the event visibility to private.
+299. Make the team lunch a public event.
+300. Add a reminder to tomorrow's meeting.
+301. Set a 30-minute reminder for the standup.
+302. Add a 1-hour email reminder to the board meeting.
+303. Remove the reminder from the team lunch.
+304. Change the reminder to 15 minutes before the event.
+305. Add a color to the project review event.
+306. Change the event color to red.
+307. Mark the standup as confirmed.
+308. Set my response to the meeting as "maybe".
+309. Accept the invitation to the team meeting.
+310. Decline the event on Friday.
+311. Move the event from my work calendar to my personal calendar.
+312. Transfer the team lunch to a different calendar.
+313. Update the event from April 11 to April 12.
+314. Change my 9am event to 10am.
+315. Shift the evening event to morning.
+316. Reschedule the sprint planning to the last day of the month.
+317. Move the product review from next quarter to this quarter.
+318. Push the training session to after lunch.
+319. Reschedule today's last event to first thing tomorrow.
+320. Move the networking event to the following week.
+321. Add "catch-up" to the title of tomorrow's meeting.
+322. Append "(online)" to the standup title.
+323. Change the event summary from "Lunch" to "Team Lunch".
+324. Shorten the title of the quarterly review.
+325. Update the event titled "Meeting" with a more descriptive name.
+326. Move the 30-minute call to a 1-hour slot.
+327. Change the project meeting from 2 hours to 45 minutes.
+328. Extend today's last meeting by 30 minutes.
+329. Cut the board meeting short by one hour.
+330. Update my availability to "free" for tomorrow morning's meeting.
+
+-----------------------------------------------------------------------
+CATEGORY 4: DELETE EVENTS (Questions 331–415)
+-----------------------------------------------------------------------
+
+331. Delete the standup.
+332. Remove tomorrow's meeting.
+333. Cancel the board meeting.
+334. Delete the team lunch.
+335. Remove the dentist appointment.
+336. Cancel the project review.
+337. Delete the event on Friday.
+338. Remove my 3pm meeting today.
+339. Cancel tomorrow's first event.
+340. Delete the recurring standup.
+341. Remove all events today.
+342. Cancel all meetings this week.
+343. Delete all events tomorrow.
+344. Remove all events from next Monday.
+345. Cancel everything on Friday.
+346. Delete the event called "Weekly Sync".
+347. Remove the meeting with Sarah.
+348. Cancel the event on April 15th.
+349. Delete the event at 10am tomorrow.
+350. Remove the all-day event on Thursday.
+351. Delete all recurring events.
+352. Cancel the next occurrence of the standup.
+353. Remove just this one instance of the weekly meeting.
+354. Delete all future occurrences of the daily standup.
+355. Cancel the entire recurring series for the team sync.
+356. Delete the event that overlaps with my lunch.
+357. Remove the duplicate meeting.
+358. Cancel any event after 6pm today.
+359. Delete all events in the past.
+360. Remove old events from last year.
+361. Cancel the event I just created.
+362. Delete the event I moved to Friday.
+363. Remove the event I renamed "Product Review".
+364. Cancel the meeting I rescheduled to next week.
+365. Delete the event that starts at 9am on Monday.
+366. Remove the birthday event on the 20th.
+367. Cancel the dinner reservation on Saturday.
+368. Delete the conference event in May.
+369. Remove the workshop scheduled for next month.
+370. Cancel the team building event in Q3.
+371. Delete events with "draft" in the title.
+372. Remove all test events.
+373. Cancel the event called "placeholder".
+374. Delete all events with no attendees.
+375. Remove all events without a description.
+376. Can you get rid of the standup meeting?
+377. I want to remove the project review.
+378. Please cancel tomorrow's meeting.
+379. I don't need the Friday event anymore, delete it.
+380. Get rid of all today's meetings.
+381. Erase the board meeting.
+382. Wipe out the event on the 5th.
+383. Scratch the team lunch.
+384. Clear all events this weekend.
+385. Delete every event in June.
+386. Remove the dentist appointment that's on Tuesday.
+387. Cancel my 2pm meeting.
+388. Delete the event titled "One-on-One".
+389. Remove the quarterly review from my calendar.
+390. Cancel the kickoff meeting on Monday.
+391. Delete today's standup only.
+392. Remove tomorrow's doctor appointment.
+393. Cancel the event at 4:30pm.
+394. Delete all events on the weekend.
+395. Remove all weekday events next week.
+396. Delete the first event of the day.
+397. Cancel the last event this week.
+398. Remove the midnight event.
+399. Delete any events that conflict with my lunch break.
+400. Cancel the event that starts in 15 minutes.
+401. Delete the event John organized.
+402. Remove all events where Sarah is an attendee.
+403. Cancel events created by me in the last 7 days.
+404. Delete all events at the downtown office location.
+405. Remove all video call events this week.
+406. Cancel the event that I declined.
+407. Delete all events I haven't responded to.
+408. Remove the event with the Zoom link.
+409. Cancel the meeting that has no description.
+410. Delete the event that's marked as free.
+411. Please delete the team standup from my calendar.
+412. I'd like to cancel the next meeting.
+413. Remove the event happening on the last day of the month.
+414. Delete the event right after lunch tomorrow.
+415. Cancel the event before my morning standup.
+
+-----------------------------------------------------------------------
+CATEGORY 5: CREATE NEW EVENTS (Questions 416–500)
+-----------------------------------------------------------------------
+
+416. Create a new event called "Team Standup" tomorrow at 9am.
+417. Add a meeting titled "Project Review" on Friday at 2pm.
+418. Schedule a doctor appointment on Tuesday at 11am.
+419. Create a birthday event for John on April 20th.
+420. Add a team lunch on Wednesday at 1pm for one hour.
+421. Schedule a one-on-one with Sarah next Monday at 3pm.
+422. Create a recurring daily standup at 9am starting tomorrow.
+423. Add a weekly team sync every Monday at 10am.
+424. Schedule a monthly board meeting on the first Monday at 9am.
+425. Create an all-day event on the 25th called "Company Holiday".
+426. Add an event called "Dentist" on next Thursday from 10am to 11am.
+427. Schedule a sprint planning on Monday from 9am to 12pm.
+428. Create a conference call on Friday at 4pm for 30 minutes.
+429. Add a dinner reservation on Saturday at 7pm for 2 hours.
+430. Schedule a workshop on the 15th from 9am to 5pm.
+431. Create an event with the description "Discuss Q2 goals".
+432. Add a meeting at the downtown office at 2pm on Monday.
+433. Schedule a Zoom call on Wednesday at 3pm.
+434. Create an event at conference room B on Thursday.
+435. Add an event at 123 Main Street on Friday at noon.
+436. Create a new event and invite John.
+437. Schedule a meeting with Sarah and Mike on Tuesday at 10am.
+438. Add a team event and send invites to the entire team.
+439. Create an event with john@example.com and sarah@example.com.
+440. Schedule a standup and invite mike@company.com.
+441. Create a 30-minute meeting tomorrow morning.
+442. Schedule a 2-hour workshop next Thursday.
+443. Add a 15-minute catch-up call on Friday.
+444. Create a half-day event next Monday.
+445. Schedule a full-day training session on the 10th.
+446. Create a reminder to call the bank tomorrow at noon.
+447. Add a reminder for my car service on Monday morning.
+448. Schedule an alert to submit the report by Friday.
+449. Create a reminder called "Pay rent" on the 1st of next month.
+450. Add a task reminder for the project deadline next week.
+451. Create an event similar to last week's standup.
+452. Schedule a meeting like the one I had with John last month.
+453. Add an event at the same time as yesterday's team sync.
+454. Create another occurrence of today's meeting for next week.
+455. Duplicate the board meeting for next month.
+456. Create an event called "Morning Run" every day at 6am.
+457. Schedule a biweekly team meeting on Tuesdays and Thursdays.
+458. Add a weekly check-in every Friday at 4pm.
+459. Create a monthly one-on-one on the last Friday of each month.
+460. Schedule a quarterly review every three months.
+461. Add an event called "Focus Time" every day from 8am to 10am.
+462. Create a lunch block on my calendar from 12pm to 1pm daily.
+463. Schedule a deep work session tomorrow from 9am to 12pm.
+464. Block off Friday afternoon for research.
+465. Create a "Do Not Disturb" block on Wednesday morning.
+466. I want to add a meeting called "Product Sync" on Monday at 2pm.
+467. Can you create an event for my interview on Thursday at 10am?
+468. Please schedule a dentist appointment for me this Friday.
+469. I need to add a team lunch this Wednesday at noon.
+470. Set up a kickoff meeting for the new project next Monday.
+471. Create an event named "Retrospective" every two weeks on Friday.
+472. Schedule a yearly review on December 31st.
+473. Add a quarterly planning session on the first Monday of each quarter.
+474. Create a monthly report submission event on the last day of each month.
+475. Schedule a weekly all-hands every Thursday at 5pm.
+476. Create a new event called "Network Call" with a Zoom link.
+477. Schedule a Google Meet for tomorrow's standup.
+478. Add a Microsoft Teams call on Thursday at 3pm.
+479. Create an event with an online meeting link.
+480. Schedule a virtual conference on the 20th all day.
+481. Create a meeting on April 15, 2026 at 9:00 AM.
+482. Add an event on 05/20/2026 called "Project Deadline".
+483. Schedule a call at 15:30 on Monday.
+484. Create an event for 2026-12-25 called "Christmas Day".
+485. Add a meeting on the third Tuesday of next month.
+486. Create an event and set the color to red.
+487. Schedule a private event on Friday called "Personal Appointment".
+488. Add a public event called "Open House" on Saturday.
+489. Create a high-priority event called "Board Presentation".
+490. Schedule an event and mark it as free time.
+491. Create the event and set my status to busy.
+492. Add the event and mark me as tentative.
+493. Schedule the meeting and confirm my attendance.
+494. Create an event with a 30-minute advance reminder.
+495. Add an event with an email notification one hour before.
+496. I need a new event: "Budget Review" with Finance team on Tuesday at 11am in Room 3.
+497. Set up a meeting called "Onboarding Session" for the new hire on Monday from 10am to 12pm with the HR team.
+498. Create a recurring weekly event called "Team Standup" every weekday at 9:15am for the next 3 months.
+499. Add a project milestone event on April 30th called "Phase 1 Complete" with a description noting the deliverables.
+500. Schedule a two-day offsite event starting next Monday all day at the Marriott Hotel and invite the entire leadership team.
+
+====================================================================
+  END OF 500 SAMPLE QUESTIONS
+====================================================================
+
+BREAKDOWN BY CATEGORY:
+  Category 1 – List/View Events ............. Questions   1–100  (100 questions)
+  Category 2 – Query Specific Events ........ Questions 101–200  (100 questions)
+  Category 3 – Modify/Update/Reschedule ..... Questions 201–330  (130 questions)
+  Category 4 – Delete Events ................ Questions 331–415  ( 85 questions)
+  Category 5 – Create New Events ............ Questions 416–500  ( 85 questions)
+  TOTAL ........................................                    500 questions
+
+USAGE TIPS FOR RAG OPTIMIZATION:
+  - Use these questions as training/evaluation prompts for your intent classifier.
+  - Pair each question with the expected intent label and extracted entities
+    (e.g., intent=RESCHEDULE, entity_event="standup", entity_date="tomorrow").
+  - Test edge cases: vague references, relative dates, multi-step requests.
+  - Expand with user-specific event names from real calendar data for better grounding.
+====================================================================

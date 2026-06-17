@@ -27,6 +27,16 @@ const MONTH_INDEX = {
   december: 11,
 };
 
+const DAY_INDEX = {
+  sunday: 0, sun: 0,
+  monday: 1, mon: 1,
+  tuesday: 2, tue: 2, tues: 2,
+  wednesday: 3, wed: 3,
+  thursday: 4, thu: 4, thur: 4, thurs: 4,
+  friday: 5, fri: 5,
+  saturday: 6, sat: 6,
+};
+
 const BASE_STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'to', 'of', 'for', 'with', 'in', 'on', 'at',
   'is', 'are', 'was', 'were', 'be', 'been', 'being', 'by', 'from', 'as', 'if', 'then',
@@ -63,7 +73,7 @@ function cleanTextToken(term) {
       if (part.endsWith('s') && part.length > 3) return part.slice(0, -1);
       return part;
     })
-    .filter((part) => part && part.length > 1 && !/^\d+$/.test(part) && !BASE_STOP_WORDS.has(part));
+    .filter((part) => part && part.length >= 1 && !BASE_STOP_WORDS.has(part));
 }
 
 function tokenizeWords(text) {
@@ -146,7 +156,7 @@ function endOfDay(date) {
 }
 
 function startOfWeek(date) {
-  const day = (date.getDay() + 6) % 7; // Monday = 0
+  const day = date.getDay(); // Sunday = 0
   const start = new Date(date);
   start.setDate(start.getDate() - day);
   return startOfDay(start);
@@ -181,6 +191,13 @@ function countNextBefore(text, unit) {
   const match = text.match(regex);
   if (!match?.[1]) return 0;
   return (match[1].match(/\bnext\b/g) || []).length;
+}
+
+function countLastBefore(text, unit) {
+  const regex = new RegExp(`((?:\\blast\\b\\s*)+)\\b${unit}\\b`);
+  const match = text.match(regex);
+  if (!match?.[1]) return 0;
+  return (match[1].match(/\blast\b/g) || []).length;
 }
 
 function parseDateString(text, now) {
@@ -267,6 +284,49 @@ function parseDateWindowHeuristic(message, now) {
     return { start: startOfDay(d), end: endOfDay(d), label: 'day before yesterday' };
   }
 
+  // "last week / last month / last year"
+  if (hasSequence(tokens, ['last', 'week']) || hasAllWords(tokens, ['last', 'week'])) {
+    const { start, end } = nextWeekWindow(now, -1);
+    return { start, end, label: 'last week' };
+  }
+  if (hasSequence(tokens, ['last', 'month']) || hasAllWords(tokens, ['last', 'month'])) {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return {
+      start: startOfMonth(d.getFullYear(), d.getMonth()),
+      end: endOfMonth(d.getFullYear(), d.getMonth()),
+      label: 'last month',
+    };
+  }
+  if (hasSequence(tokens, ['last', 'year']) || hasAllWords(tokens, ['last', 'year'])) {
+    const y = now.getFullYear() - 1;
+    return {
+      start: new Date(y, 0, 1, 0, 0, 0, 0),
+      end: new Date(y, 11, 31, 23, 59, 59, 999),
+      label: 'last year',
+    };
+  }
+
+  // Day-of-week names WITH explicit modifier only: "this Friday", "next Tuesday", "last Wednesday"
+  // Bare day names ("on Saturday", "saturdays") are handled by parseDayOfWeekFilter as a recurring filter.
+  const DOW_PATTERN = Object.keys(DAY_INDEX).join('|');
+  const dowModMatch = text.match(new RegExp(`\\b(last|this|next)\\s+(${DOW_PATTERN})\\b`));
+  if (dowModMatch && !['week', 'month', 'year', 'weekend'].includes(dowModMatch[2])) {
+    const modifier = dowModMatch[1];
+    const targetDay = DAY_INDEX[dowModMatch[2]];
+    const todayDay = now.getDay();
+    let diff = targetDay - todayDay;
+    if (modifier === 'last') {
+      if (diff >= 0) diff -= 7;
+    } else if (modifier === 'next') {
+      if (diff <= 0) diff += 7;
+    } else { // 'this'
+      if (diff < 0) diff += 7;
+    }
+    const d = new Date(now);
+    d.setDate(now.getDate() + diff);
+    return { start: startOfDay(d), end: endOfDay(d), label: `${modifier} ${dowModMatch[2]}` };
+  }
+
   if (hasSequence(tokens, ['this', 'week']) || hasAllWords(tokens, ['this', 'week'])) {
     const { start, end } = nextWeekWindow(now, 0);
     return { start, end, label: 'this week' };
@@ -280,6 +340,24 @@ function parseDateWindowHeuristic(message, now) {
       end,
       label: nextWeekCount === 1 ? 'next week' : `${nextWeekCount} weeks ahead`,
     };
+  }
+
+  // "this weekend" / "next weekend"
+  if (hasSequence(tokens, ['next', 'weekend']) || hasAllWords(tokens, ['next', 'weekend'])) {
+    const daysToNextSat = ((6 - now.getDay() + 7) % 7) + 7;
+    const nextSat = new Date(now);
+    nextSat.setDate(now.getDate() + daysToNextSat);
+    const nextSun = new Date(nextSat);
+    nextSun.setDate(nextSat.getDate() + 1);
+    return { start: startOfDay(nextSat), end: endOfDay(nextSun), label: 'next weekend' };
+  }
+  if (hasWord(tokens, 'weekend')) {
+    const daysToSat = (6 - now.getDay() + 7) % 7;
+    const thisSat = new Date(now);
+    thisSat.setDate(now.getDate() + daysToSat);
+    const thisSun = new Date(thisSat);
+    thisSun.setDate(thisSat.getDate() + 1);
+    return { start: startOfDay(thisSat), end: endOfDay(thisSun), label: 'this weekend' };
   }
 
   if (hasSequence(tokens, ['this', 'month']) || hasAllWords(tokens, ['this', 'month'])) {
@@ -318,6 +396,109 @@ function parseDateWindowHeuristic(message, now) {
     };
   }
 
+  // Quarter support: "Q1"–"Q4", "this quarter", "next quarter", "last quarter"
+  const quarterNumMatch = text.match(/\bq([1-4])\b/i);
+  if (quarterNumMatch) {
+    const q = parseInt(quarterNumMatch[1], 10) - 1;
+    const qYear = now.getFullYear();
+    return {
+      start: startOfMonth(qYear, q * 3),
+      end: endOfMonth(qYear, q * 3 + 2),
+      label: `Q${q + 1} ${qYear}`,
+    };
+  }
+  if (hasSequence(tokens, ['last', 'quarter']) || hasAllWords(tokens, ['last', 'quarter'])) {
+    let q = Math.floor(now.getMonth() / 3) - 1;
+    let qYear = now.getFullYear();
+    if (q < 0) { q = 3; qYear -= 1; }
+    return {
+      start: startOfMonth(qYear, q * 3),
+      end: endOfMonth(qYear, q * 3 + 2),
+      label: `last quarter (Q${q + 1})`,
+    };
+  }
+  if (hasSequence(tokens, ['next', 'quarter']) || hasAllWords(tokens, ['next', 'quarter'])) {
+    const q = (Math.floor(now.getMonth() / 3) + 1) % 4;
+    const qYear = q === 0 ? now.getFullYear() + 1 : now.getFullYear();
+    return {
+      start: startOfMonth(qYear, q * 3),
+      end: endOfMonth(qYear, q * 3 + 2),
+      label: `next quarter (Q${q + 1})`,
+    };
+  }
+  if (hasSequence(tokens, ['this', 'quarter']) || hasAllWords(tokens, ['this', 'quarter'])) {
+    const q = Math.floor(now.getMonth() / 3);
+    const qYear = now.getFullYear();
+    return {
+      start: startOfMonth(qYear, q * 3),
+      end: endOfMonth(qYear, q * 3 + 2),
+      label: `this quarter (Q${q + 1})`,
+    };
+  }
+
+  // N-day windows: "next N days", "past N days", "last N days", "in N days", "N days from now"
+  const nextNDaysMatch = text.match(/\bnext\s+(\d+)\s+days?\b/);
+  if (nextNDaysMatch) {
+    const n = parseInt(nextNDaysMatch[1], 10);
+    const end = new Date(now);
+    end.setDate(end.getDate() + n);
+    return { start: startOfDay(now), end: endOfDay(end), label: `next ${n} days` };
+  }
+  const pastNDaysMatch = text.match(/\b(?:past|last)\s+(\d+)\s+days?\b/);
+  if (pastNDaysMatch) {
+    const n = parseInt(pastNDaysMatch[1], 10);
+    const start = new Date(now);
+    start.setDate(start.getDate() - n);
+    return { start: startOfDay(start), end: endOfDay(now), label: `past ${n} days` };
+  }
+  const inNDaysMatch = text.match(/\bin\s+(\d+)\s+days?\b/);
+  if (inNDaysMatch) {
+    const n = parseInt(inNDaysMatch[1], 10);
+    const d = new Date(now);
+    d.setDate(d.getDate() + n);
+    return { start: startOfDay(d), end: endOfDay(d), label: `in ${n} days` };
+  }
+  // N-week windows: "past N weeks", "last N weeks", "coming N weeks"
+  const pastNWeeksMatch = text.match(/\b(?:past|last)\s+(\d+)\s+weeks?\b/);
+  if (pastNWeeksMatch) {
+    const n = parseInt(pastNWeeksMatch[1], 10);
+    const start = new Date(now);
+    start.setDate(start.getDate() - n * 7);
+    return { start: startOfDay(start), end: endOfDay(now), label: `past ${n} weeks` };
+  }
+  // N-month windows: "past N months", "last N months", "N months ago", "N months from now"
+  const pastNMonthsMatch = text.match(/\b(?:past|last)\s+(\d+)\s+months?\b/);
+  if (pastNMonthsMatch) {
+    const n = parseInt(pastNMonthsMatch[1], 10);
+    const d = new Date(now.getFullYear(), now.getMonth() - n, 1);
+    return { start: startOfMonth(d.getFullYear(), d.getMonth()), end: endOfDay(now), label: `past ${n} months` };
+  }
+  const nMonthsAgoMatch = text.match(/\b(\d+)\s+months?\s+ago\b/);
+  if (nMonthsAgoMatch) {
+    const n = parseInt(nMonthsAgoMatch[1], 10);
+    const d = new Date(now.getFullYear(), now.getMonth() - n, 1);
+    return { start: startOfMonth(d.getFullYear(), d.getMonth()), end: endOfMonth(d.getFullYear(), d.getMonth()), label: `${n} months ago` };
+  }
+  const nMonthsFromNow = text.match(/\b(\d+)\s+months?\s+from\s+(?:now|today)\b/);
+  if (nMonthsFromNow) {
+    const n = parseInt(nMonthsFromNow[1], 10);
+    const d = new Date(now.getFullYear(), now.getMonth() + n, 1);
+    return { start: startOfMonth(d.getFullYear(), d.getMonth()), end: endOfMonth(d.getFullYear(), d.getMonth()), label: `in ${n} months` };
+  }
+
+  // Seasonal windows (Northern Hemisphere)
+  const SEASON_MONTHS = { spring: [2, 4], summer: [5, 7], fall: [8, 10], autumn: [8, 10], winter: [11, 1] };
+  for (const [season, [startM, endM]] of Object.entries(SEASON_MONTHS)) {
+    if (new RegExp(`\\b${season}\\b`).test(text)) {
+      const year = now.getFullYear();
+      if (startM <= endM) {
+        return { start: startOfMonth(year, startM), end: endOfMonth(year, endM), label: `${season} ${year}` };
+      }
+      // Winter wraps year: Dec (11) → Jan-Feb of next year
+      return { start: startOfMonth(year, 11), end: endOfMonth(year + 1, 1), label: `winter ${year}-${year + 1}` };
+    }
+  }
+
   const monthWindow = parseMonthWindow(text, now);
   if (monthWindow) return monthWindow;
 
@@ -331,6 +512,33 @@ function parseDateWindowHeuristic(message, now) {
   if (direct) return { start: startOfDay(direct), end: endOfDay(direct), label: 'that date' };
 
   return null;
+}
+
+// Returns {startHour, endHour} for morning/afternoon/evening qualifiers, or null.
+function parseTimeOfDayFilter(message) {
+  const text = normalizeText(message);
+  if (/\b(morning|early morning|before noon)\b/.test(text)) return { startHour: 5, endHour: 11 };
+  if (/\b(afternoon|midday|after lunch)\b/.test(text)) return { startHour: 12, endHour: 17 };
+  if (/\b(evening|tonight|after (5|6|7)pm|night)\b/.test(text)) return { startHour: 18, endHour: 23 };
+  return null;
+}
+
+// Returns 0-6 (Sun=0) when message refers to a recurring day of the week,
+// e.g. "on saturday", "saturdays", "every monday", "all fridays".
+// Returns null when a specific single-day window should be used instead.
+function parseDayOfWeekFilter(message) {
+  const text = normalizeText(message);
+  // Skip when an explicit one-day modifier was used ("this friday", "next monday") —
+  // those are already resolved to a date window by parseDateWindowHeuristic.
+  if (/\b(this|next|last)\s+(sunday|sun|monday|mon|tuesday|tue|tues|wednesday|wed|thursday|thu|thur|thurs|friday|fri|saturday|sat)\b/.test(text)) {
+    return null;
+  }
+  // Match plural form ("saturdays", "mondays") or singular bare form ("on saturday", "every saturday")
+  const m = text.match(/\b(?:on\s+|every\s+|all\s+)?(sundays?|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?)\b/);
+  if (!m) return null;
+  const raw = m[1].replace(/s$/, ''); // strip trailing 's' → canonical singular
+  const dayIdx = DAY_INDEX[raw];
+  return dayIdx !== undefined ? dayIdx : null;
 }
 
 function parseIsoDate(value) {
@@ -376,7 +584,7 @@ function parseDurationFilter(text) {
 }
 
 function looksCalendarQuestion(text) {
-  return /\b(event|events|calendar|meeting|meetings|schedule|birthday|slot|slots|today|tomorrow|week|month|date|when|next|upcoming|count|how many)\b/.test(
+  return /\b(event|events|calendar|meeting|meetings|appointment|appointments|schedule|birthday|slot|slots|today|tomorrow|week|month|date|when|next|upcoming|count|how many|am i|do i have|standup|stand up|interview|sync|one on one|busy|free|available|block|reminder|conference|workshop|training|lunch|dinner|review|demo|kickoff)\b/.test(
     normalizeText(text)
   );
 }
@@ -387,7 +595,9 @@ function detectIntent(message) {
   const wantsCount = /\b(how many|count|number of|total)\b/.test(text);
   const asksUpcomingList = /\b(list|show|what are)\b.*\b(upcoming)\b|\bupcoming (events|meetings|appointments)\b/.test(text);
   const wantsNext = !asksUpcomingList && /\b(next event|next meeting|what is my next|whats my next|soonest)\b/.test(text);
-  const wantsLast = /\b(last event|latest event|final event|my last event)\b/.test(text);
+  const wantsLast = /\b(last event|latest event|final event|my last event|last meeting|end of day)\b/.test(text);
+  const wantsLongest = /\b(longest|longest event|most time|maximum duration|longest meeting)\b/.test(text);
+  const wantsShortest = /\b(shortest|shortest event|quickest|fastest|minimum duration|shortest meeting)\b/.test(text);
   const wantsCancelled = /\b(cancelled|canceled|deleted|removed)\b/.test(text);
   const asksScheduleList = /\b(schedule|agenda|plan)\b/.test(text) && !/\b(when|what time|at what time)\b/.test(text);
   const asksEventList = /\b(list|show|which|what)\b.*\b(events|meetings|appointments)\b|\bwhat do i have\b|\blist them\b|\bshow them\b|\blist all\b/.test(text);
@@ -396,14 +606,19 @@ function detectIntent(message) {
   const isGreeting = /^(h+i+|he+y+|hello+|yo+|hola+|sup+|greetings|good\s*(morning|afternoon|evening)|hey|hiya)\b/.test(text);
 
   // Additional intent detection for common queries
-  const asksWhere = /\b(where|location|place|venue|address)\b/.test(text);
+  const asksWhere = /\b(where|location|place|venue|address|room)\b/.test(text);
   const asksWho = /\b(who|attendees|participants|people|person|with whom)\b/.test(text);
   const asksWhat = /\b(what|details|information|about|describe)\b/.test(text);
+  const asksDescription = /\b(description|desc|agenda|notes?|what('?s| is) in|what does.*say|body of|details about)\b/.test(text);
+  const asksFreeTime = /\b(free|available|open slot|am i free|not busy|no event)\b/.test(text);
+  const asksConflict = /\b(conflict|overlap|overlapping|double.?book|clash)\b/.test(text);
 
   return {
     wantsCount,
     wantsNext,
     wantsLast,
+    wantsLongest,
+    wantsShortest,
     wantsCancelled,
     asksWhen,
     asksAllDay,
@@ -411,12 +626,255 @@ function detectIntent(message) {
     asksWhere,
     asksWho,
     asksWhat,
+    asksDescription,
+    asksFreeTime,
+    asksConflict,
     asksUpcomingList,
     asksScheduleList,
     asksEventList,
     durationFilter,
   };
 }
+
+// ─── Mutation / Agentic helpers ───────────────────────────────────────────────
+
+function isConfirmation(message) {
+  const text = normalizeText(message).trim();
+  return /^(yes|yeah|yep|yup|sure|ok|okay|confirm|go ahead|do it|proceed|delete it|remove it|update it|move it|y|affirmative|correct|please do|sounds good|absolutely)$/.test(text);
+}
+
+function isRejection(message) {
+  const text = normalizeText(message).trim();
+  return /^(no|nope|nah|cancel|stop|nevermind|never mind|abort|dont|don'?t|n|negative|skip it|forget it|leave it)$/.test(text);
+}
+
+function detectMutationIntent(message) {
+  const text = normalizeText(message);
+
+  const hasDeleteWord = /\b(delete|remove|cancel(?! that)|drop|erase|get rid of|scratch)\b/.test(text);
+  const hasCreateWord = /\b(create|add|schedule|set up|setup|book|make|new|plan|block off|block out|add a|add an)\b/.test(text);
+  const hasMoveWord = /\b(move|reschedule|shift|postpone|push back|bring forward|change|update|edit|modify|rename|extend|shorten|lengthen|change the time|change the date|change the title|change the name)\b/.test(text);
+  const hasEventWord = /\b(event|meeting|appointment|call|session|reminder|standup|stand-?up|sync|lunch|dinner|interview|demo|review|check.?in|1:?1|one on one)\b/.test(text);
+  const hasToPhrase = /\b(to|at|on|for|by)\b/.test(text);
+  const isRename = /\b(rename|change.*?(title|name)|call it|called)\b/.test(text);
+
+  if (hasDeleteWord && !hasCreateWord) {
+    return { action: 'delete' };
+  }
+  if (hasCreateWord && (hasEventWord || hasToPhrase)) {
+    return { action: 'create' };
+  }
+  if (hasMoveWord && (hasToPhrase || isRename || hasEventWord) && !hasCreateWord) {
+    return { action: 'update' };
+  }
+  return { action: null };
+}
+
+function extractEventRefFromMessage(message, action) {
+  let text = String(message || '').trim();
+
+  if (action === 'delete') {
+    text = text.replace(/^\s*(please\s+)?(delete|remove|cancel|drop|erase)\s+(the\s+|my\s+|that\s+|a\s+)?/i, '');
+    text = text.replace(/\s+(event|meeting|appointment|call|session|reminder)\s*[?.!]*\s*$/i, '');
+  } else if (action === 'update') {
+    text = text.replace(/^\s*(please\s+)?(move|reschedule|shift|change|update|edit|postpone|push back|bring forward|modify)\s+(the\s+|my\s+|that\s+|a\s+)?/i, '');
+    text = text.replace(/\s+(to|from)\s+.+$/i, '');
+    text = text.replace(/\s+(event|meeting|appointment|call|session|reminder)\s*[?.!]*\s*$/i, '');
+  }
+
+  return text.trim().replace(/[?.!]+$/, '').trim();
+}
+
+function parseTimeFromText(text) {
+  const s = String(text || '').toLowerCase();
+
+  // "at 3:30 pm", "3:30 pm", "at 3.30pm", "3.30PM" (colon or dot separator)
+  let m = s.match(/\bat\s+(\d{1,2})[.:](\d{2})\s*(am|pm)?\b/);
+  if (!m) m = s.match(/\b(\d{1,2})[.:](\d{2})\s*(am|pm)\b/);
+  if (!m) m = s.match(/\b(\d{1,2})[.:](\d{2})\b/); // bare "14:30" or "2.30" with no am/pm
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const ampm = m[3];
+    if (ampm === 'pm' && h < 12) h += 12;
+    else if (ampm === 'am' && h === 12) h = 0;
+    else if (!ampm && h <= 8 && h >= 1) h += 12; // dot/colon without am/pm: assume PM only for 1–8 (9–11 are morning business hours)
+    if (h >= 0 && h < 24 && min >= 0 && min < 60) return { h, m: min };
+  }
+
+  // "at 3 pm" or "3pm" or "at 9" (whole hour)
+  m = s.match(/\bat\s+(\d{1,2})\s*(am|pm|o'?clock)?\b/);
+  if (!m) m = s.match(/\b(\d{1,2})\s*(am|pm)\b/);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const ampm = m[2];
+    if (ampm === 'pm' && h !== 12) h += 12;
+    else if (ampm === 'am' && h === 12) h = 0;
+    else if (!ampm && h >= 1 && h <= 7) h += 12; // assume PM for ambiguous 1-7
+    if (h >= 0 && h < 24) return { h, m: 0 };
+  }
+
+  return null;
+}
+
+function parseDurationFromText(text) {
+  const s = normalizeText(text);
+
+  let m = s.match(/\bfor\s+(\d+)\s*hours?\s*(?:and\s+)?(\d+)?\s*min/);
+  if (m) return parseInt(m[1], 10) * 60 + (m[2] ? parseInt(m[2], 10) : 0);
+
+  m = s.match(/\bfor\s+(\d+\.?\d*)\s*hours?\b/);
+  if (m) return Math.round(parseFloat(m[1]) * 60);
+
+  m = s.match(/\bfor\s+(\d+)\s*min/);
+  if (m) return parseInt(m[1], 10);
+
+  return 60; // default 1 hour
+}
+
+function parseCreateEventDetails(message, now) {
+  const text = String(message || '');
+
+  // Extract title using progressive patterns
+  let summary = null;
+  const titlePatterns = [
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?(?:event|meeting|appointment|call|session|reminder)?\s+(?:called|named|titled)\s+"([^"]+)"/i,
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?(?:event|meeting|appointment|call|session|reminder)?\s+(?:called|named|titled)\s+([^\n,]+?)(?:\s+(?:for|on|at|tomorrow|today)\b)/i,
+    /\b(?:create|add|schedule|book|set up|make)\s+(?:a\s+)?(?:new\s+)?"([^"]+)"/i,
+    /\b(?:schedule|book|add|create)\s+(?:a\s+)?([\w\s]{2,40}?)\s+(?:meeting|event|appointment|call|session|standup)\b/i,
+    /\b(?:schedule|book|add|create)\s+(?:a\s+)?(?:new\s+)?([\w\s]{2,40}?)\s+(?:for|on|at)\b/i,
+  ];
+
+  for (const pat of titlePatterns) {
+    const found = text.match(pat);
+    if (found) {
+      const candidate = (found[1] || '').trim().replace(/^(the|a|an)\s+/i, '');
+      if (candidate && candidate.length > 1 && !/^(for|on|at|tomorrow|today|next|this)\s/i.test(candidate)) {
+        summary = candidate;
+        break;
+      }
+    }
+  }
+
+  // Extract date — try specific date first (e.g. "Nov 29", "10/30/2026"),
+  // then fall back to relative heuristic (e.g. "tomorrow", "next week").
+  // Try both original case (for slash dates) and lowercased (for named months like "November").
+  const specificDate = parseDateString(text, now) || parseDateString(text.toLowerCase(), now);
+  const dateWindow = !specificDate ? parseDateWindowHeuristic(text, now) : null;
+  const date = specificDate || dateWindow?.start;
+
+  // Extract time
+  const timeObj = parseTimeFromText(text);
+
+  // Extract duration
+  const durationMinutes = parseDurationFromText(text);
+
+  let startDateTime = null;
+  let endDateTime = null;
+
+  if (date || timeObj) {
+    const baseDate = date || now;
+    const h = timeObj != null ? timeObj.h : 9; // default 9 AM if only date given
+    const min = timeObj != null ? timeObj.m : 0;
+    const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), h, min, 0, 0);
+    startDateTime = startDate.toISOString();
+    endDateTime = new Date(startDate.getTime() + durationMinutes * 60000).toISOString();
+  }
+
+  // Extract location (e.g. "at the office" or "at Conference Room A")
+  let location = null;
+  const locMatch = text.match(/\bat\s+((?:[A-Z][a-zA-Z]+\s*){1,4})(?:\s+on|\s+for|\s+at\s+\d|\.|,|$)/);
+  if (locMatch && !/^\d/.test(locMatch[1])) location = locMatch[1].trim();
+
+  // Extract attendees: email addresses and "with [Names]"
+  const attendeeEmails = [];
+  const emailRegex = /\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g;
+  let emailMatch;
+  while ((emailMatch = emailRegex.exec(text)) !== null) {
+    attendeeEmails.push(emailMatch[1]);
+  }
+
+  return { summary, startDateTime, endDateTime, location, attendeeEmails };
+}
+
+function parseUpdateEventDetails(message, now) {
+  const text = String(message || '');
+  const updates = {};
+
+  // Extract the destination portion of the message (text after the last " to ").
+  // This fixes "move my 3pm standup to 5pm" picking up 3pm instead of 5pm.
+  // e.g. "move my 3pm standup to 5pm"      → parseText = "5pm"
+  // e.g. "reschedule meeting to next Monday" → parseText = "next Monday"
+  // e.g. "change time of doctor appt to 2pm" → parseText = "2pm"
+  const lastToIdx = text.toLowerCase().lastIndexOf(' to ');
+  const parseText = lastToIdx !== -1 ? text.slice(lastToIdx + 4) : text;
+
+  // Try specific date first (original for slash dates, lowercased for named months).
+  // Only fall back to heuristic for relative terms like "tomorrow", "next week".
+  const specificDate = parseDateString(parseText, now) || parseDateString(parseText.toLowerCase(), now);
+  const dateWindow = !specificDate ? parseDateWindowHeuristic(parseText, now) : null;
+  const date = specificDate || dateWindow?.start;
+  const timeObj = parseTimeFromText(parseText);
+
+  if (date || timeObj) {
+    const baseDate = date || now;
+    const h = timeObj != null ? timeObj.h : null;
+    const min = timeObj != null ? timeObj.m : 0;
+
+    if (h !== null) {
+      // We have a specific time
+      const startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), h, min, 0, 0);
+      const durationMinutes = parseDurationFromText(text);
+      updates.start = { dateTime: startDate.toISOString() };
+      updates.end = { dateTime: new Date(startDate.getTime() + durationMinutes * 60000).toISOString() };
+    } else if (date) {
+      // Only a date change — time will be set by backend from existing event
+      updates._newDate = date;
+    }
+  }
+
+  // New title
+  const titleMatch = text.match(/\b(?:rename|change.*?title|change.*?name|call it|called)\s+(?:it\s+)?(?:to\s+)?"?([^"]+?)"?\s*$/i);
+  if (titleMatch) updates.summary = titleMatch[1].trim();
+
+  // Location update
+  const locationMatch = text.match(/\b(?:change|update|set|move)\s+(?:the\s+)?(?:location|venue|place|room|address)\s+to\s+(.+?)(?:\s*[.,!?]|$)/i);
+  if (locationMatch) updates.location = locationMatch[1].trim();
+
+  // Description / notes / agenda update
+  const descMatch = text.match(/\b(?:change|update|set|add)\s+(?:a\s+)?(?:the\s+)?(?:description|desc|notes?|agenda|details?)\s+(?:to\s+|:\s*)"?([^"]+?)"?\s*(?:[.,!?]|$)/i);
+  if (descMatch) updates.description = descMatch[1].trim();
+
+  return updates;
+}
+
+function formatEventTimeForChat(event) {
+  const raw = event.startAt || event.start;
+  if (!raw) return 'unknown time';
+  // All-day events stored as YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) {
+    const d = new Date(`${raw}T12:00:00`);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function formatDateTimeStringForChat(isoString) {
+  if (!isoString) return 'unknown time';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return String(isoString);
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+// ─── End Mutation helpers ──────────────────────────────────────────────────────
 
 function eventOverlapsWindow(event, window) {
   if (!window?.start || !window?.end) return true;
@@ -575,8 +1033,8 @@ function isBroadSnapshotQuery({ tokens, window, intent }) {
 function isContextFollowUp(message, tokens, window) {
   const text = normalizeText(message);
   if (window) return false;
-  if (tokens?.length) return false;
-  return /\b(them|those|these|it|that one|last one|first one)\b/.test(text);
+  // Allow follow-up even when there ARE content tokens (e.g. "show these events on saturdays")
+  return /\b(them|those|these|it|that one|last one|first one|show them|list them|show those|list those|show these|list these)\b/.test(text);
 }
 
 function serializeWindow(window) {
@@ -601,14 +1059,17 @@ function deserializeWindow(window) {
 }
 
 const TIMED_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
   month: 'short',
   day: 'numeric',
   year: 'numeric',
   hour: 'numeric',
   minute: '2-digit',
+  hour12: true,
 });
 
 const DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
   month: 'short',
   day: 'numeric',
   year: 'numeric',
@@ -617,6 +1078,7 @@ const DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-US', {
 const TIME_ONLY_FORMATTER = new Intl.DateTimeFormat('en-US', {
   hour: 'numeric',
   minute: '2-digit',
+  hour12: true,
 });
 
 function formatWhen(event) {
@@ -662,12 +1124,17 @@ function buildChatReplyData({ message, results, intent, window }) {
       wantsCount: Boolean(intent?.wantsCount),
       wantsNext: Boolean(intent?.wantsNext),
       wantsLast: Boolean(intent?.wantsLast),
+      wantsLongest: Boolean(intent?.wantsLongest),
+      wantsShortest: Boolean(intent?.wantsShortest),
       asksWhen: Boolean(intent?.asksWhen),
       wantsCancelled: Boolean(intent?.wantsCancelled),
       asksAllDay: Boolean(intent?.asksAllDay),
       asksWhere: Boolean(intent?.asksWhere),
       asksWho: Boolean(intent?.asksWho),
       asksWhat: Boolean(intent?.asksWhat),
+      asksDescription: Boolean(intent?.asksDescription),
+      asksFreeTime: Boolean(intent?.asksFreeTime),
+      asksConflict: Boolean(intent?.asksConflict),
       asksUpcomingList: Boolean(intent?.asksUpcomingList),
       asksScheduleList: Boolean(intent?.asksScheduleList),
       asksEventList: Boolean(intent?.asksEventList),
@@ -869,6 +1336,26 @@ function formatFallbackResponse(data) {
         : `I found '${firstEvent.summary}', but I do not see attendee details saved for it.`;
     }
 
+    if (data.intent?.asksDescription) {
+      if (firstEvent.description) {
+        return `Here are the notes for '${firstEvent.summary}' (${firstEvent.when}):\n${firstEvent.description}`;
+      }
+      return `I found '${firstEvent.summary}' on ${firstEvent.when}, but it does not have any description or notes saved.`;
+    }
+
+    if (data.intent?.asksFreeTime) {
+      const busy = data.eventsPreview.map((e) => `• ${e.summary} at ${e.when}`).join('\n');
+      return data.window
+        ? `Here are your events for ${data.window.label} (you may have gaps between them):\n${busy}`
+        : `You have events scheduled. Here they are:\n${busy}`;
+    }
+
+    if (data.intent?.asksConflict) {
+      return data.count > 1
+        ? `I found ${data.count} events in that window — there may be overlaps:\n${data.eventsPreview.map((e) => `• ${e.summary} — ${e.when}`).join('\n')}`
+        : `I found only 1 event in that window, so there are no conflicts.`;
+    }
+
     if (
       data.intent?.asksWhat &&
       !data.intent?.asksScheduleList &&
@@ -884,11 +1371,14 @@ function formatFallbackResponse(data) {
 
   if (data.eventsPreview && data.eventsPreview.length > 0) {
     const eventList = data.eventsPreview.map((event) => `${event.index}. ${event.summary} - ${event.when}`).join('\n');
+    const moreNote = data.hasMore
+      ? `\n\n(Showing first ${data.eventsPreview.length} of ${data.count} total events.)`
+      : '';
 
     if (data.window) {
-      return `Here are your events ${data.window.label ? `for ${data.window.label}` : 'in the specified time range'}:\n${eventList}`;
+      return `Here are your events ${data.window.label ? `for ${data.window.label}` : 'in the specified time range'}:\n${eventList}${moreNote}`;
     }
-    return `Here are your events:\n${eventList}`;
+    return `Here are your events:\n${eventList}${moreNote}`;
   }
 
   return "I found some calendar data, but I'm not sure how to present it. Could you rephrase your request?";
@@ -902,23 +1392,34 @@ function extractFirstJsonObject(text) {
   return raw.slice(start, end + 1);
 }
 
-async function inferWithModel({ ollama, message }) {
+async function inferWithModel({ ollama, message, now = new Date() } = {}) {
   if (!ollama?.generate) return null;
 
+  const todayISO = now.toISOString();
+  const todayLabel = now.toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
   const prompt = [
-    'You are a calendar assistant AI. Convert the user message into structured intent JSON for a calendar assistant.',
-    'Always return valid JSON. No markdown or extra text.',
+    `You are a calendar assistant AI. Today is ${todayLabel} (${todayISO}).`,
+    'Convert the user message into structured intent JSON for a calendar assistant.',
+    'Always return valid JSON only. No markdown, no extra text, no explanation.',
+    '',
     'Instructions:',
-    '- Always return a JSON object with the specified fields',
-    '- If uncertain, default to kind="calendar" and set minimal fields',
-    '- For greetings/smalltalk, set kind="smalltalk"',
-    '- Extract time expressions, date ranges, search terms, and person names when mentioned',
-    '- Identify if user wants counts, next events, all-day events, or cancelled events',
+    '- Return a JSON object with ALL fields from the schema below.',
+    '- Set "action" to "delete", "update", "create", or "query" (default).',
+    '- For greetings/smalltalk set kind="smalltalk", action="query".',
+    '- For delete: set eventRef to the event title the user mentioned.',
+    '- For update: set eventRef to the event title, and EITHER targetDateTime (full ISO-8601, resolved from today) OR targetDateOnly (YYYY-MM-DD if time unchanged). Also set newTitle if renaming.',
+    '- For create: set eventTitle and targetDateTime (resolved ISO-8601).',
+    '- Resolve ALL relative dates ("tomorrow", "next Monday", "next week") into absolute ISO-8601 using today\'s date above.',
+    '- If uncertain about action, default to "query".',
     '',
     'JSON Schema:',
     '{',
     '  "kind": "smalltalk" | "calendar",',
-    '  "reply": "string (only for smalltalk)",',
+    '  "action": "query" | "create" | "update" | "delete",',
+    '  "reply": "string (only for smalltalk kind)",',
     '  "count": boolean,',
     '  "next": boolean,',
     '  "allDay": boolean,',
@@ -927,18 +1428,48 @@ async function inferWithModel({ ollama, message }) {
     '  "dateRange": {"start":"ISO-8601","end":"ISO-8601","label":"string"} | null,',
     '  "searchPhrases": ["string"],',
     '  "personTerms": ["string"],',
-    '  "duration": {"op":"eq|gt|lt|gte|lte","minutes":number} | null',
+    '  "duration": {"op":"eq|gt|lt|gte|lte","minutes":number} | null,',
+    '  "eventRef": "string — exact event name/title to find for update or delete",',
+    '  "targetDateTime": "ISO-8601 datetime — new start time for update or create (resolve relative dates!)",',
+    '  "targetDateOnly": "YYYY-MM-DD — use when only the date changes, time stays the same",',
+    '  "newTitle": "string — new title when renaming an event",',
+    '  "eventTitle": "string — title for the new event when creating",',
+    '  "eventDuration": number | null',
     '}',
     '',
     'Examples:',
     'User: "Hello!"',
-    'Response: {"kind":"smalltalk","reply":"Hello! How can I help you with your calendar today?","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null}',
+    'Response: {"kind":"smalltalk","action":"query","reply":"Hello! How can I help you with your calendar today?","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
     '',
     'User: "Show me meetings with John next week"',
-    'Response: {"kind":"calendar","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"next week","dateRange":null,"searchPhrases":["meetings with John"],"personTerms":["John"],"duration":null}',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"next week","dateRange":null,"searchPhrases":["meetings with John"],"personTerms":["John"],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Delete my team standup"',
+    'Response: {"kind":"calendar","action":"delete","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"team standup","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Move my 3pm standup to 5pm today"',
+    'Response: {"kind":"calendar","action":"update","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"standup","targetDateTime":"' + new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0).toISOString() + '","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Reschedule my doctor appointment to next Friday"',
+    'Response: {"kind":"calendar","action":"update","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"doctor appointment","targetDateTime":"","targetDateOnly":"RESOLVE_NEXT_FRIDAY_YYYY-MM-DD","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Create a team meeting tomorrow at 2 PM for 30 minutes"',
+    'Response: {"kind":"calendar","action":"create","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"' + new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 14, 0).toISOString() + '","targetDateOnly":"","newTitle":"","eventTitle":"team meeting","eventDuration":30}',
     '',
     'User: "How many events do I have today?"',
-    'Response: {"kind":"calendar","reply":"","count":true,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"today","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null}',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":true,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"today","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "What happened last week?"',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"last week","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Do I have anything on Friday?"',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"this friday","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Show me Q2 events"',
+    'Response: {"kind":"calendar","action":"query","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"Q2","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"","targetDateTime":"","targetDateOnly":"","newTitle":"","eventTitle":"","eventDuration":null}',
+    '',
+    'User: "Rename the standup to Daily Sync"',
+    'Response: {"kind":"calendar","action":"update","reply":"","count":false,"next":false,"allDay":false,"wantsCancelled":false,"timeExpression":"","dateRange":null,"searchPhrases":[],"personTerms":[],"duration":null,"eventRef":"standup","targetDateTime":"","targetDateOnly":"","newTitle":"Daily Sync","eventTitle":"","eventDuration":null}',
     '',
     'User message: ' + message,
   ].join('\n');
@@ -947,7 +1478,7 @@ async function inferWithModel({ ollama, message }) {
     const response = await ollama.generate({ prompt });
     const jsonText = ollama.extractFirstJsonObject ? ollama.extractFirstJsonObject(response) : extractFirstJsonObject(response);
     if (!jsonText) {
-      console.log('[chat.debug] Failed to extract JSON from LLM response:', response);
+      console.log('[chat.debug] Failed to extract JSON from LLM response:', response?.slice(0, 300));
       return null;
     }
 
@@ -955,12 +1486,14 @@ async function inferWithModel({ ollama, message }) {
     try {
       parsed = JSON.parse(jsonText);
     } catch (parseError) {
-      console.log('[chat.debug] Failed to parse JSON from LLM response:', jsonText);
+      console.log('[chat.debug] Failed to parse JSON from LLM response:', jsonText?.slice(0, 300));
       return null;
     }
 
+    const validActions = ['query', 'create', 'update', 'delete'];
     const result = {
       kind: (parsed?.kind === 'smalltalk' || parsed?.kind === 'calendar') ? parsed.kind : 'calendar',
+      action: validActions.includes(parsed?.action) ? parsed.action : 'query',
       reply: typeof parsed?.reply === 'string' ? parsed.reply.trim() : '',
       count: Boolean(parsed?.count),
       next: Boolean(parsed?.next),
@@ -971,6 +1504,13 @@ async function inferWithModel({ ollama, message }) {
       searchPhrases: Array.isArray(parsed?.searchPhrases) ? parsed.searchPhrases.filter((x) => typeof x === 'string') : [],
       personTerms: Array.isArray(parsed?.personTerms) ? parsed.personTerms.filter((x) => typeof x === 'string') : [],
       duration: null,
+      // Mutation fields
+      eventRef: typeof parsed?.eventRef === 'string' ? parsed.eventRef.trim() : '',
+      targetDateTime: typeof parsed?.targetDateTime === 'string' ? parsed.targetDateTime.trim() : '',
+      targetDateOnly: typeof parsed?.targetDateOnly === 'string' ? parsed.targetDateOnly.trim() : '',
+      newTitle: typeof parsed?.newTitle === 'string' ? parsed.newTitle.trim() : '',
+      eventTitle: typeof parsed?.eventTitle === 'string' ? parsed.eventTitle.trim() : '',
+      eventDuration: (typeof parsed?.eventDuration === 'number' && parsed.eventDuration > 0) ? parsed.eventDuration : null,
     };
 
     if (parsed?.duration && typeof parsed.duration === 'object') {
@@ -993,7 +1533,7 @@ async function inferWithModel({ ollama, message }) {
       }
     }
 
-    console.log('[chat.debug] LLM intent result:', result);
+    console.log('[chat.debug] LLM intent result:', JSON.stringify(result));
     return result;
   } catch (error) {
     console.log('[chat.debug] LLM intent error:', error?.message || error);
@@ -1002,9 +1542,15 @@ async function inferWithModel({ ollama, message }) {
 }
 
 function smallTalkReply(message, llmReply) {
+  const text = normalizeText(message);
+  // Answer date/time questions directly — the server always knows the current time
+  if (/\b(what time|current time|current date|what date|what day is it|todays date|today.?s date|what is today|what is the date|current date time|date and time)\b/.test(text)) {
+    const now = new Date();
+    return `It is currently ${now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}.`;
+  }
   if (llmReply) return llmReply;
-  if (/\b(thank|thanks|ty)\b/.test(normalizeText(message))) return 'You are welcome.';
-  return 'Hi! I’m here to help with your calendar. What would you like to know?';
+  if (/\b(thank|thanks|ty)\b/.test(text)) return 'You are welcome.';
+  return "Hi! I'm here to help with your calendar. What would you like to know?";
 }
 
 function mergeTokens(message, llmIntent) {
@@ -1093,6 +1639,7 @@ function createChatRouter({
   refreshEvents,
   maxResults = 50,
   n8n = {},
+  calendarOps = null,
 } = {}) {
   const router = express.Router();
 
@@ -1104,31 +1651,360 @@ function createChatRouter({
       const email = await getSessionEmail(req);
       if (!email) return res.status(400).json({ message: 'No user email available. Connect Google first.' });
 
-      if (n8n?.enabled === true) {
-        const sessionId = req.sessionID || req.session?.id || 'default';
-        const result = await callN8nChatWebhook({
-          webhookUrl: n8n.webhookUrl,
-          timeoutMs: n8n.timeoutMs,
-          apiKey: n8n.apiKey,
-          message,
-          userId: email,
-          sessionId,
-        });
-        req.session.lastChatContext = {
-          query: message,
-          eventIds: [],
-          window: null,
-          source: 'n8n',
-        };
-        return res.json({ reply: result.reply, source: 'n8n' });
+      // ─── Agentic mutation handling ─────────────────────────────────────────
+      const collection = getCollection();
+
+      // 1. Handle pending confirmation / rejection
+      const pendingAction = req.session?.pendingChatAction || null;
+      if (pendingAction) {
+        const confirmed = isConfirmation(message);
+        const rejected = isRejection(message);
+
+        if (confirmed || rejected) {
+          req.session.pendingChatAction = undefined;
+
+          if (rejected) {
+            return res.json({ reply: 'Action cancelled. Is there anything else I can help you with?' });
+          }
+
+          // Execute confirmed action
+          if (pendingAction.type === 'delete') {
+            try {
+              if (!calendarOps?.getGoogleCalendar) {
+                return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+              }
+              const gcal = calendarOps.getGoogleCalendar(req);
+              await gcal.events.delete({ calendarId: 'primary', eventId: pendingAction.eventId });
+              if (collection) await calendarOps.markEventDeleted(email, pendingAction.eventId);
+              try { await calendarOps.refreshAndPersistLatest(req); } catch (syncErr) { console.warn('[chat] Post-delete sync failed (non-fatal):', syncErr?.message); }
+              return res.json({
+                reply: `Done! I've deleted "${pendingAction.eventSummary}" from your Google Calendar and updated your local data.`,
+                actionCompleted: { type: 'delete', eventId: pendingAction.eventId },
+              });
+            } catch (err) {
+              console.error('[chat] Delete failed:', err?.message || err);
+              const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+              return res.json({ reply: `Sorry, I couldn't delete the event: ${msg}` });
+            }
+          }
+
+          if (pendingAction.type === 'update') {
+            try {
+              if (!calendarOps?.getGoogleCalendar) {
+                return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+              }
+              const gcal = calendarOps.getGoogleCalendar(req);
+              const updates = { ...pendingAction.updates };
+              delete updates._newDate;
+
+              // Case 1: Date-only change — fetch existing event to preserve original time-of-day
+              if (pendingAction.updates._newDate && !pendingAction.updates.start) {
+                try {
+                  const existing = await gcal.events.get({ calendarId: 'primary', eventId: pendingAction.eventId });
+                  const existingStart = existing.data.start?.dateTime || existing.data.start?.date;
+                  const existingEnd = existing.data.end?.dateTime || existing.data.end?.date;
+                  if (existingStart && !existing.data.start?.date) {
+                    const oldStart = new Date(existingStart);
+                    const oldEnd = new Date(existingEnd || existingStart);
+                    const duration = oldEnd.getTime() - oldStart.getTime();
+                    const nd = pendingAction.updates._newDate;
+                    const newStart = new Date(nd.getFullYear(), nd.getMonth(), nd.getDate(), oldStart.getHours(), oldStart.getMinutes(), 0, 0);
+                    updates.start = { dateTime: newStart.toISOString() };
+                    updates.end = { dateTime: new Date(newStart.getTime() + duration).toISOString() };
+                  }
+                } catch (_) { /* use what we have */ }
+              }
+
+              // Case 2: New start time provided but no end — preserve existing event duration
+              if (updates.start?.dateTime && !updates.end) {
+                try {
+                  const existing = await gcal.events.get({ calendarId: 'primary', eventId: pendingAction.eventId });
+                  const existingStart = existing.data.start?.dateTime;
+                  const existingEnd = existing.data.end?.dateTime;
+                  if (existingStart && existingEnd) {
+                    const duration = new Date(existingEnd).getTime() - new Date(existingStart).getTime();
+                    updates.end = { dateTime: new Date(new Date(updates.start.dateTime).getTime() + duration).toISOString() };
+                  }
+                } catch (_) { /* proceed without end — Google Calendar will keep existing */ }
+              }
+
+              const resp = await gcal.events.patch({ calendarId: 'primary', eventId: pendingAction.eventId, requestBody: updates });
+              // Sync updated event to MongoDB immediately
+              if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_update' });
+              // Full refresh — non-fatal: specific event is already synced above
+              try { await calendarOps.refreshAndPersistLatest(req); } catch (syncErr) { console.warn('[chat] Post-update sync failed (non-fatal):', syncErr?.message); }
+              return res.json({
+                reply: `Done! I've updated "${pendingAction.eventSummary}" — the changes are saved in Google Calendar and synced locally.`,
+                actionCompleted: { type: 'update', eventId: pendingAction.eventId },
+              });
+            } catch (err) {
+              console.error('[chat] Update failed:', err?.message || err);
+              const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+              return res.json({ reply: `Sorry, I couldn't update the event: ${msg}` });
+            }
+          }
+        }
       }
 
-      const collection = getCollection();
+      // 2. Early LLM inference — runs before mutations so intent drives both paths
+      const now = new Date();
+      const useLlmIntent = process.env.CHAT_USE_LLM_INTENT === 'true';
+      const llmIntent = useLlmIntent ? await inferWithModel({ ollama, message, now }) : null;
+
+      // 3. Check for mutation intents — prefer LLM action, fall back to regex
+      if (collection) {
+        const regexMutationIntent = detectMutationIntent(message);
+        const effectiveAction = (llmIntent?.action && llmIntent.action !== 'query')
+          ? llmIntent.action
+          : regexMutationIntent.action;
+
+        if (effectiveAction === 'delete') {
+          // Prefer LLM-extracted event name; fall back to regex stripping
+          const eventRef = llmIntent?.eventRef?.trim()
+            ? llmIntent.eventRef.trim()
+            : extractEventRefFromMessage(message, 'delete');
+          const refTokens = tokenizeQuery(eventRef || message);
+
+          if (!refTokens.length) {
+            return res.json({ reply: 'Which event would you like to delete? Please tell me its name or describe it.' });
+          }
+
+          const searchFilter = {
+            email,
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+            status: { $ne: 'cancelled' },
+            searchTokens: { $in: refTokens },
+          };
+
+          const candidates = await collection
+            .find(searchFilter, { projection: { _id: 0, eventId: 1, summary: 1, startAt: 1, start: 1, end: 1, location: 1 } })
+            .sort({ startAt: 1 })
+            .limit(10)
+            .toArray();
+
+          const ranked = preferExactSummaryMatches(rankEventsByText(candidates, refTokens), refTokens);
+
+          if (!ranked.length) {
+            return res.json({ reply: `I couldn't find any event matching "${eventRef}". Could you be more specific or check the event name?` });
+          }
+
+          const ev = ranked[0];
+          const when = formatEventTimeForChat(ev);
+
+          if (ranked.length === 1) {
+            req.session.pendingChatAction = {
+              type: 'delete',
+              eventId: ev.eventId,
+              eventSummary: ev.summary || '(No title)',
+            };
+            return res.json({
+              reply: `I found **"${ev.summary || '(No title)'}"** scheduled for ${when}.\n\nAre you sure you want to permanently delete this event from your Google Calendar?\n\nReply **"yes"** to confirm or **"no"** to cancel.`,
+              requiresConfirmation: true,
+              pendingAction: { type: 'delete', eventSummary: ev.summary || '(No title)', when },
+            });
+          }
+
+          // Multiple matches — list them
+          const list = ranked.slice(0, 5).map((e, i) => `${i + 1}. "${e.summary || '(No title)'}" — ${formatEventTimeForChat(e)}`).join('\n');
+          return res.json({ reply: `I found multiple events matching "${eventRef}":\n\n${list}\n\nPlease be more specific — which one do you want to delete?` });
+        }
+
+        if (effectiveAction === 'create') {
+          const eventDetails = parseCreateEventDetails(message, now);
+
+          // Override with LLM-parsed data when available and valid
+          if (llmIntent?.eventTitle?.trim()) {
+            eventDetails.summary = llmIntent.eventTitle.trim();
+          }
+          if (llmIntent?.targetDateTime) {
+            const llmStart = new Date(llmIntent.targetDateTime);
+            if (!isNaN(llmStart.getTime())) {
+              const durMins = llmIntent.eventDuration || parseDurationFromText(message);
+              eventDetails.startDateTime = llmStart.toISOString();
+              eventDetails.endDateTime = new Date(llmStart.getTime() + durMins * 60000).toISOString();
+            }
+          }
+
+          if (!eventDetails.summary) {
+            return res.json({ reply: 'I\'d be happy to create an event! Please include:\n• A name/title\n• Date (e.g. "tomorrow", "April 5")\n• Time (e.g. "at 3 PM")\n\nExample: "Create a team meeting on April 5 at 2 PM"' });
+          }
+
+          if (!eventDetails.startDateTime) {
+            return res.json({ reply: `I'll create "${eventDetails.summary}". What date and time should it be scheduled? (e.g. "tomorrow at 3 PM" or "April 5 at 2:30 PM")` });
+          }
+
+          try {
+            if (!calendarOps?.getGoogleCalendar) {
+              return res.json({ reply: 'Google Calendar is not connected. Please connect it via the dashboard first.' });
+            }
+            const gcal = calendarOps.getGoogleCalendar(req);
+            const requestBody = {
+              summary: eventDetails.summary,
+              start: { dateTime: eventDetails.startDateTime },
+              end: { dateTime: eventDetails.endDateTime },
+            };
+            if (eventDetails.location) requestBody.location = eventDetails.location;
+            if (eventDetails.attendeeEmails?.length) {
+              requestBody.attendees = eventDetails.attendeeEmails.map((email) => ({ email }));
+            }
+
+            const resp = await gcal.events.insert({ calendarId: 'primary', requestBody });
+            if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_create' });
+            // Full refresh — non-fatal: new event is already synced above
+            try { await calendarOps.refreshAndPersistLatest(req); } catch (syncErr) { console.warn('[chat] Post-create sync failed (non-fatal):', syncErr?.message); }
+
+            const startStr = formatDateTimeStringForChat(eventDetails.startDateTime);
+            const endStr = formatDateTimeStringForChat(eventDetails.endDateTime);
+            return res.json({
+              reply: `Done! I've created **"${eventDetails.summary}"**\n📅 Starts: ${startStr}\n⏰ Ends: ${endStr}${eventDetails.location ? `\n📍 Location: ${eventDetails.location}` : ''}\n\nThe event is now in your Google Calendar and synced locally.`,
+              actionCompleted: { type: 'create', eventId: resp.data.id },
+            });
+          } catch (err) {
+            console.error('[chat] Create failed:', err?.message || err);
+            const msg = err?.response?.data?.error?.message || err?.message || 'Please try again.';
+            return res.json({ reply: `Sorry, I couldn't create the event: ${msg}` });
+          }
+        }
+
+        if (effectiveAction === 'update') {
+          // Prefer LLM-extracted event name; fall back to regex stripping
+          const eventRef = llmIntent?.eventRef?.trim()
+            ? llmIntent.eventRef.trim()
+            : extractEventRefFromMessage(message, 'update');
+          const refTokens = tokenizeQuery(eventRef || message);
+          const updates = parseUpdateEventDetails(message, now);
+
+          // Override with LLM datetime when available — always more accurate than regex
+          if (llmIntent?.targetDateTime) {
+            const llmStart = new Date(llmIntent.targetDateTime);
+            if (!isNaN(llmStart.getTime())) {
+              updates.start = { dateTime: llmStart.toISOString() };
+              // end will be preserved from existing event duration in confirmation handler
+              delete updates._newDate;
+              delete updates.end;
+            }
+          } else if (llmIntent?.targetDateOnly) {
+            const d = new Date(`${llmIntent.targetDateOnly}T00:00:00`);
+            if (!isNaN(d.getTime())) {
+              updates._newDate = d;
+              delete updates.start;
+              delete updates.end;
+            }
+          }
+          if (llmIntent?.newTitle?.trim()) {
+            updates.summary = llmIntent.newTitle.trim();
+          }
+
+          if (!refTokens.length) {
+            return res.json({ reply: 'Which event would you like to update? Please include the event name.' });
+          }
+
+          const searchFilter = {
+            email,
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+            status: { $ne: 'cancelled' },
+            searchTokens: { $in: refTokens },
+          };
+
+          const candidates = await collection
+            .find(searchFilter, { projection: { _id: 0, eventId: 1, summary: 1, startAt: 1, start: 1, end: 1, location: 1 } })
+            .sort({ startAt: 1 })
+            .limit(10)
+            .toArray();
+
+          const ranked = preferExactSummaryMatches(rankEventsByText(candidates, refTokens), refTokens);
+
+          if (!ranked.length) {
+            return res.json({ reply: `I couldn't find any event matching "${eventRef}". Could you be more specific?` });
+          }
+
+          if (!updates.start && !updates._newDate && !updates.summary && !updates.location && !updates.description) {
+            const ev = ranked[0];
+            return res.json({ reply: `I found **"${ev.summary || '(No title)'}"** on ${formatEventTimeForChat(ev)}.\n\nWhat would you like to change? For example:\n• "move it to April 5 at 3 PM"\n• "reschedule to tomorrow at 2 PM"\n• "rename it to New Meeting Name"` });
+          }
+
+          const ev = ranked[0];
+          const summaryLabel = ev.summary || '(No title)';
+
+          // For time/date changes, ask for confirmation
+          if (updates.start || updates._newDate) {
+            let newTimeStr;
+            if (updates.start) {
+              newTimeStr = formatDateTimeStringForChat(updates.start.dateTime);
+            } else {
+              newTimeStr = updates._newDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            }
+            req.session.pendingChatAction = {
+              type: 'update',
+              eventId: ev.eventId,
+              eventSummary: summaryLabel,
+              updates,
+            };
+            return res.json({
+              reply: `I'll move **"${summaryLabel}"** to ${newTimeStr}.\n\nShall I proceed? Reply **"yes"** to confirm or **"no"** to cancel.`,
+              requiresConfirmation: true,
+              pendingAction: { type: 'update', eventSummary: summaryLabel, newTime: newTimeStr },
+            });
+          }
+
+          // Title-only change — do immediately
+          try {
+            if (!calendarOps?.getGoogleCalendar) {
+              return res.json({ reply: 'Google Calendar is not connected. Please connect it first.' });
+            }
+            const gcal = calendarOps.getGoogleCalendar(req);
+            const patchBody = {};
+            if (updates.summary) patchBody.summary = updates.summary;
+            if (updates.location) patchBody.location = updates.location;
+            if (updates.description) patchBody.description = updates.description;
+            const resp = await gcal.events.patch({ calendarId: 'primary', eventId: ev.eventId, requestBody: patchBody });
+            if (collection) await calendarOps.upsertFullEvents(email, 'primary', [resp.data], { source: 'chat_update' });
+            // Full refresh — non-fatal: specific event is already synced above
+            try { await calendarOps.refreshAndPersistLatest(req); } catch (syncErr) { console.warn('[chat] Post-update sync failed (non-fatal):', syncErr?.message); }
+            return res.json({
+              reply: `Done! I've updated "${summaryLabel}" → "${updates.summary}". The change is saved in Google Calendar and synced locally.`,
+              actionCompleted: { type: 'update', eventId: ev.eventId },
+            });
+          } catch (err) {
+            console.error('[chat] Title update failed:', err?.message || err);
+            return res.json({ reply: `Sorry, I couldn't update the event: ${err?.message || 'Please try again.'}` });
+          }
+        }
+      }
+      // ─── End agentic mutation handling ────────────────────────────────────────
+
+      if (n8n?.enabled === true) {
+        const sessionId = req.sessionID || req.session?.id || 'default';
+        try {
+          const result = await callN8nChatWebhook({
+            webhookUrl: n8n.webhookUrl,
+            timeoutMs: n8n.timeoutMs,
+            apiKey: n8n.apiKey,
+            message,
+            userId: email,
+            sessionId,
+          });
+          req.session.lastChatContext = {
+            query: message,
+            eventIds: [],
+            window: null,
+            source: 'n8n',
+          };
+          return res.json({ reply: result.reply, source: 'n8n' });
+        } catch (n8nError) {
+          console.warn('n8n chat failed, falling back to local chat:', n8nError?.message || n8nError);
+        }
+      }
+
       if (!collection) return res.status(503).json({ message: 'Database not ready yet.' });
 
       const intent = detectIntent(message);
-      const useLlmIntent = process.env.CHAT_USE_LLM_INTENT === 'true';
-      const llmIntent = useLlmIntent ? await inferWithModel({ ollama, message }) : null;
+      // useLlmIntent, llmIntent, and now were declared earlier before mutation handling
+
+      // Intercept date/time queries before the calendar path — the server always knows the time
+      if (/\b(what time|current time|current date|what date|what day is it|todays date|today.?s date|what is today|what is the date|current date time|date and time)\b/.test(normalizeText(message))) {
+        return res.json({ reply: smallTalkReply(message, null) });
+      }
 
       if ((intent.isGreeting || llmIntent?.kind === 'smalltalk') && !looksCalendarQuestion(message)) {
         return res.json({ reply: smallTalkReply(message, llmIntent?.reply) });
@@ -1138,12 +2014,17 @@ function createChatRouter({
         wantsCount: intent.wantsCount || Boolean(llmIntent?.count),
         wantsNext: intent.wantsNext || Boolean(llmIntent?.next),
         wantsLast: intent.wantsLast,
+        wantsLongest: intent.wantsLongest,
+        wantsShortest: intent.wantsShortest,
         wantsCancelled: intent.wantsCancelled || Boolean(llmIntent?.wantsCancelled),
         asksWhen: intent.asksWhen || Boolean(llmIntent?.timeExpression),
         asksAllDay: intent.asksAllDay || Boolean(llmIntent?.allDay),
         asksWhere: intent.asksWhere,
         asksWho: intent.asksWho,
         asksWhat: intent.asksWhat,
+        asksDescription: intent.asksDescription,
+        asksFreeTime: intent.asksFreeTime,
+        asksConflict: intent.asksConflict,
         asksUpcomingList: intent.asksUpcomingList,
         asksScheduleList: intent.asksScheduleList,
         asksEventList: intent.asksEventList,
@@ -1156,10 +2037,13 @@ function createChatRouter({
         status: effectiveIntent.wantsCancelled ? 'cancelled' : { $ne: 'cancelled' },
       };
 
-      const now = new Date();
+      // now was declared earlier before mutation handling
       let window =
         parseDateWindowHeuristic(message, now) ||
         parseDateWindowFromLlmIntent(llmIntent, now);
+
+      // Recurring day-of-week filter: "on saturdays", "every monday", bare "saturday"
+      const dowFilter = parseDayOfWeekFilter(message);
 
       const tokens = mergeTokens(message, llmIntent);
       const priorChatContext = req.session?.lastChatContext || null;
@@ -1167,6 +2051,7 @@ function createChatRouter({
       if (!window && isFollowUp) {
         window = deserializeWindow(priorChatContext?.window);
       }
+      // Pass tokens to mongoFilter always; when DOW is set with no tokens, tokens=[] anyway
       const mongoFilter = buildMongoPreFilter(baseFilter, window, tokens);
       const snapshotCollection = typeof getSnapshotCollection === 'function' ? getSnapshotCollection() : null;
 
@@ -1262,6 +2147,28 @@ function createChatRouter({
       let filtered = dbResults.filter((event) => eventOverlapsWindow(event, window));
       console.log('[chat.debug] after window filter=', filtered.length);
 
+      // Apply recurring day-of-week filter ("on saturdays", "every monday", etc.)
+      if (dowFilter !== null) {
+        filtered = filtered.filter((event) => {
+          const d = toDateOrNull(event.startAt || event.start);
+          return d ? d.getDay() === dowFilter : false;
+        });
+        console.log('[chat.debug] after dow filter=', filtered.length);
+      }
+
+      // Apply time-of-day filter ("morning", "afternoon", "evening")
+      const todFilter = parseTimeOfDayFilter(message);
+      if (todFilter) {
+        filtered = filtered.filter((event) => {
+          if (isAllDayEvent(event)) return false;
+          const d = toDateOrNull(event.startAt || event.start);
+          if (!d) return false;
+          const h = d.getHours();
+          return h >= todFilter.startHour && h <= todFilter.endHour;
+        });
+        console.log('[chat.debug] after time-of-day filter=', filtered.length);
+      }
+
       if (effectiveIntent.asksAllDay) {
         filtered = filtered.filter((event) => isAllDayEvent(event));
       }
@@ -1272,8 +2179,13 @@ function createChatRouter({
           .filter((event) => matchesDuration(event, effectiveIntent.durationFilter));
       }
 
-      filtered = rankEventsByText(filtered, tokens);
-      filtered = preferExactSummaryMatches(filtered, tokens);
+      // Skip text-ranking only for pure follow-ups (no new content tokens),
+      // or when DOW filter is set but there are no meaningful title/keyword tokens.
+      const skipTextRank = isFollowUp || (dowFilter !== null && tokens.length === 0);
+      if (!skipTextRank) {
+        filtered = rankEventsByText(filtered, tokens);
+        filtered = preferExactSummaryMatches(filtered, tokens);
+      }
       console.log('[chat.debug] after text filter=', filtered.length);
 
       if (effectiveIntent.wantsNext) {
@@ -1290,6 +2202,21 @@ function createChatRouter({
             const aStart = toDateOrNull(a.start)?.getTime() || 0;
             const bStart = toDateOrNull(b.start)?.getTime() || 0;
             return bStart - aStart;
+          })
+          .slice(0, 1);
+      } else if (effectiveIntent.wantsLongest) {
+        filtered = filtered
+          .slice()
+          .sort((a, b) => (getDurationMinutes(b) || 0) - (getDurationMinutes(a) || 0))
+          .slice(0, 1);
+      } else if (effectiveIntent.wantsShortest) {
+        filtered = filtered
+          .filter((event) => !isAllDayEvent(event))
+          .slice()
+          .sort((a, b) => {
+            const da = getDurationMinutes(a) ?? Infinity;
+            const db = getDurationMinutes(b) ?? Infinity;
+            return da - db;
           })
           .slice(0, 1);
       } else if (filtered.length > maxResults) {

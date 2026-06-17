@@ -959,6 +959,12 @@ async function searchStoredEvents({
   };
 }
 
+// Trust Render's (and other reverse proxy) forwarded headers so that
+// req.secure is true on HTTPS and session cookies work correctly.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(
   session({
     secret: SESSION_SECRET,
@@ -967,6 +973,9 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
+      // Render and most cloud hosts terminate TLS at the proxy level.
+      // secure:true requires trust proxy above so Express sees req.secure=true.
+      secure: process.env.NODE_ENV === 'production',
     },
   })
 );
@@ -994,6 +1003,12 @@ const chatRouter = createChatRouter({
     webhookUrl: N8N_CHAT_WEBHOOK_URL,
     timeoutMs: Number(N8N_CHAT_TIMEOUT_MS) || 60000,
     apiKey: N8N_CHAT_API_KEY,
+  },
+  calendarOps: {
+    getGoogleCalendar: (req) => google.calendar({ version: 'v3', auth: getOAuthClientForRequest(req) }),
+    upsertFullEvents,
+    markEventDeleted,
+    refreshAndPersistLatest,
   },
 });
 
@@ -1708,13 +1723,20 @@ app.patch('/api/events/:eventId', requireLocalAuth, async (req, res) => {
       return res.status(400).json({ message: 'No editable fields provided.' });
     }
 
+    const email = await getSessionEmail(req, { forceRefresh: true });
     const calendar = google.calendar({ version: 'v3', auth: getOAuthClientForRequest(req) });
-    await calendar.events.patch({
+    const patchResp = await calendar.events.patch({
       calendarId: 'primary',
       eventId: req.params.eventId,
       sendUpdates,
       requestBody,
     });
+
+    // Immediately sync the patched event to MongoDB so it's up-to-date regardless
+    // of whether the broad refreshAndPersistLatest window covers this event.
+    if (email && patchResp?.data) {
+      await upsertFullEvents(email, 'primary', [patchResp.data], { source: 'direct_patch' });
+    }
 
     const latest = await refreshAndPersistLatest(req);
     return res.json({ ok: true, latest });
